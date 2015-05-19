@@ -279,6 +279,8 @@ typedef struct CassValue_ CassValue;
  */
 typedef struct CassCollection_ CassCollection;
 
+typedef struct CassUserType_ CassUserType;
+
 /**
  * @struct CassSsl
  *
@@ -389,13 +391,16 @@ typedef enum CassValueType_ {
   CASS_VALUE_TYPE_INET      = 0x0010,
   CASS_VALUE_TYPE_LIST      = 0x0020,
   CASS_VALUE_TYPE_MAP       = 0x0021,
-  CASS_VALUE_TYPE_SET       = 0x0022
+  CASS_VALUE_TYPE_SET       = 0x0022,
+  CASS_VALUE_TYPE_UDT       = 0x0030,
+  CASS_VALUE_TYPE_TUPLE     = 0x0031
 } CassValueType;
 
 typedef enum CassCollectionType_ {
   CASS_COLLECTION_TYPE_LIST = CASS_VALUE_TYPE_LIST,
   CASS_COLLECTION_TYPE_MAP = CASS_VALUE_TYPE_MAP,
-  CASS_COLLECTION_TYPE_SET = CASS_VALUE_TYPE_SET
+  CASS_COLLECTION_TYPE_SET = CASS_VALUE_TYPE_SET,
+  CASS_COLLECTION_TYPE_TUPLE = CASS_VALUE_TYPE_TUPLE
 } CassCollectionType;
 
 typedef enum CassBatchType_ {
@@ -1316,6 +1321,36 @@ CASS_EXPORT void
 cass_session_get_metrics(CassSession* session,
                          CassMetrics* output);
 
+CASS_EXPORT CassStatement*
+cass_session_new_statement(CassSession* session,
+                           const char* query,
+                           size_t parameter_count);
+
+CASS_EXPORT CassStatement*
+cass_session_new_statement_n(CassSession* session,
+                             const char* query,
+                             size_t query_length,
+                             size_t parameter_count);
+
+CASS_EXPORT CassBatch*
+cass_session_new_batch(CassSession* session,
+                       CassBatchType type);
+
+CASS_EXPORT CassCollection*
+cass_session_new_collection(CassSession* session,
+                            CassCollectionType type,
+                            size_t item_count);
+
+CASS_EXPORT CassUserType*
+cass_session_new_user_type(CassSession* session,
+                           const char* name);
+
+CASS_EXPORT CassUserType*
+cass_session_new_user_type_n(CassSession* session,
+                             const char* name,
+                             size_t name_length);
+
+
 /***********************************************************************************
  *
  * Schema metadata
@@ -2149,6 +2184,11 @@ cass_statement_bind_collection(CassStatement* statement,
                                const CassCollection* collection);
 
 
+CASS_EXPORT CassError
+cass_statement_bind_user_type(CassStatement* statement,
+                              size_t index,
+                              const CassUserType* user_type);
+
 /**
  * Binds a null to all the values with the specified name.
  *
@@ -2667,6 +2707,16 @@ cass_statement_bind_collection_by_name_n(CassStatement* statement,
                                          size_t name_length,
                                          const CassCollection* collection);
 
+CASS_EXPORT CassError
+cass_statement_bind_user_type_by_name(CassStatement* statement,
+                                      const char* name,
+                                      const CassUserType* user_type);
+
+CASS_EXPORT CassError
+cass_statement_bind_user_type_by_name_n(CassStatement* statement,
+                                        const char* name,
+                                        size_t name_length,
+                                        const CassUserType* user_type);
 
 /***********************************************************************************
  *
@@ -2941,6 +2991,234 @@ cass_collection_append_decimal(CassCollection* collection,
                                const cass_byte_t* varint,
                                size_t varint_size,
                                cass_int32_t scale);
+
+
+CASS_EXPORT CassError
+cass_collection_append_collection(CassCollection* collection,
+                                  const CassCollection* value);
+
+CASS_EXPORT CassError
+cass_collection_append_user_type(CassCollection* collection,
+                                 const CassUserType* value);
+
+/***********************************************************************************
+ *
+ * User Type
+ *
+ ***********************************************************************************/
+
+CASS_EXPORT CassError
+cass_user_type_set_int32(CassUserType* user_type,
+                         size_t index,
+                         cass_int32_t value);
+
+CASS_EXPORT CassError
+cass_user_type_set_int32_by_name(CassUserType* user_type,
+                                 const char* name,
+                                 cass_int32_t value);
+
+CASS_EXPORT CassError
+cass_user_type_set_int32_by_name_n(CassUserType* user_type,
+                                   const char* name,
+                                   size_t name_length,
+                                   cass_int32_t value);
+
+CASS_EXPORT CassError
+cass_user_type_set_int64(CassUserType* user_type,
+                         size_t index,
+                         cass_int64_t value);
+
+CASS_EXPORT CassError
+cass_user_type_set_int64_by_name(CassUserType* user_type,
+                                 const char* name,
+                                 cass_int64_t value);
+
+CASS_EXPORT CassError
+cass_user_type_set_int64_by_name_n(CassUserType* user_type,
+                                   const char* name,
+                                   size_t name_length,
+                                   cass_int64_t value);
+
+CASS_EXPORT CassError
+cass_user_type_set_float(CassUserType* user_type,
+                         size_t index,
+                         cass_float_t value);
+
+CASS_EXPORT CassError
+cass_user_type_set_float_by_name(CassUserType* user_type,
+                                 const char* name,
+                                 cass_float_t value);
+
+CASS_EXPORT CassError
+cass_user_type_set_float_by_name_n(CassUserType* user_type,
+                                   const char* name,
+                                   size_t name_length,
+                                   cass_float_t value);
+
+CASS_EXPORT CassError
+cass_user_type_set_double(CassUserType* user_type,
+                         size_t index,
+                         cass_double_t value);
+
+CASS_EXPORT CassError
+cass_user_type_set_double_by_name(CassUserType* user_type,
+                                 const char* name,
+                                 cass_double_t value);
+
+CASS_EXPORT CassError
+cass_user_type_set_double_by_name_n(CassUserType* user_type,
+                                   const char* name,
+                                   size_t name_length,
+                                   cass_double_t value);
+
+CASS_EXPORT CassError
+cass_user_type_set_bool(CassUserType* user_type,
+                         size_t index,
+                         cass_bool_t value);
+
+CASS_EXPORT CassError
+cass_user_type_set_bool_by_name(CassUserType* user_type,
+                                 const char* name,
+                                 cass_bool_t value);
+
+CASS_EXPORT CassError
+cass_user_type_set_bool_by_name_n(CassUserType* user_type,
+                                   const char* name,
+                                   size_t name_length,
+                                   cass_bool_t value);
+
+
+CASS_EXPORT CassError
+cass_user_type_set_string(CassUserType* user_type,
+                          size_t index,
+                          const char* value);
+
+CASS_EXPORT CassError
+cass_user_type_set_string_n(CassUserType* user_type,
+                            size_t index,
+                            const char* value,
+                            size_t value_length);
+
+CASS_EXPORT CassError
+cass_user_type_set_string_by_name(CassUserType* user_type,
+                                 const char* name,
+                                 const char* value);
+
+CASS_EXPORT CassError
+cass_user_type_set_string_by_name_n(CassUserType* user_type,
+                                   const char* name,
+                                   size_t name_length,
+                                   const char* value,
+                                   size_t value_length);
+
+CASS_EXPORT CassError
+cass_user_type_set_bytes(CassUserType* user_type,
+                         size_t index,
+                         const cass_byte_t* value,
+                         size_t value_size);
+
+CASS_EXPORT CassError
+cass_user_type_set_bytes_by_name(CassUserType* user_type,
+                                 const char* name,
+                                 const cass_byte_t* value,
+                                 size_t value_size);
+
+CASS_EXPORT CassError
+cass_user_type_set_bytes_by_name_n(CassUserType* user_type,
+                                   const char* name,
+                                   size_t name_length,
+                                   const cass_byte_t* value,
+                                   size_t value_size);
+
+CASS_EXPORT CassError
+cass_user_type_set_uuid(CassUserType* user_type,
+                         size_t index,
+                         CassUuid value);
+
+CASS_EXPORT CassError
+cass_user_type_set_uuid_by_name(CassUserType* user_type,
+                                 const char* name,
+                                 CassUuid value);
+
+CASS_EXPORT CassError
+cass_user_type_set_uuid_by_name_n(CassUserType* user_type,
+                                   const char* name,
+                                   size_t name_length,
+                                   CassUuid value);
+
+CASS_EXPORT CassError
+cass_user_type_set_inet(CassUserType* user_type,
+                         size_t index,
+                         CassInet value);
+
+CASS_EXPORT CassError
+cass_user_type_set_inet_by_name(CassUserType* user_type,
+                                 const char* name,
+                                 CassInet value);
+
+CASS_EXPORT CassError
+cass_user_type_set_inet_by_name_n(CassUserType* user_type,
+                                   const char* name,
+                                   size_t name_length,
+                                   CassInet value);
+
+CASS_EXPORT CassError
+cass_user_type_set_decimal(CassUserType* user_type,
+                           size_t index,
+                           const cass_byte_t* varint,
+                           size_t varint_size,
+                           int scale);
+
+CASS_EXPORT CassError
+cass_user_type_set_decimal_by_name(CassUserType* user_type,
+                                   const char* name,
+                                   const cass_byte_t* varint,
+                                   size_t varint_size,
+                                   int scale);
+
+CASS_EXPORT CassError
+cass_user_type_set_decimal_by_name_n(CassUserType* user_type,
+                                     const char* name,
+                                     size_t name_length,
+                                     const cass_byte_t* varint,
+                                     size_t varint_size,
+                                     int scale);
+
+CASS_EXPORT CassError
+cass_user_type_set_collection(CassUserType* user_type,
+                              size_t index,
+                              const CassCollection* value);
+
+CASS_EXPORT CassError
+cass_user_type_set_collection_by_name(CassUserType* user_type,
+                                      const char* name,
+                                      const CassCollection* value);
+
+CASS_EXPORT CassError
+cass_user_type_set_collection_by_name_n(CassUserType* user_type,
+                                        const char* name,
+                                        size_t name_length,
+                                        const CassCollection* value);
+
+CASS_EXPORT CassError
+cass_user_type_set_user_type(CassUserType* user_type,
+                             size_t index,
+                             const CassUserType* value);
+
+CASS_EXPORT CassError
+cass_user_type_set_user_type_by_name(CassUserType* user_type,
+                                     const char* name,
+                                     const CassUserType* value);
+
+CASS_EXPORT CassError
+cass_user_type_set_user_type_by_name_n(CassUserType* user_type,
+                                       const char* name,
+                                       size_t name_length,
+                                       const CassUserType* value);
+
+
+CASS_EXPORT void
+cass_user_type_free(CassUserType* user_type);
 
 /***********************************************************************************
  *

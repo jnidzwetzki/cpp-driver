@@ -185,6 +185,49 @@ void Schema::update_tables(ResultResponse* table_result, ResultResponse* col_res
   update_columns(col_result);
 }
 
+void Schema::update_usertypes(ResultResponse* usertypes_result) {
+
+  usertypes_result->decode_first_row();
+  ResultIterator rows(usertypes_result);
+
+  while (rows.next()) {
+    std::string keyspace_name;
+    std::string type_name;
+    const Row* row = rows.row();
+
+    if (!row->get_string_by_name("keyspace_name", &keyspace_name) ||
+        !row->get_string_by_name("type_name", &type_name)) {
+      LOG_ERROR("Unable to column value for 'keyspace_name' or 'type_name'");
+      continue;
+    }
+
+    const Value* names_value = row->get_by_name("field_names");
+    if (names_value == NULL || names_value->is_null()) {
+      LOG_ERROR("'field_names' column for keyspace '%s' and type '%s' is null",
+                keyspace_name.c_str(), type_name.c_str());
+      continue;
+    }
+
+    const Value* types_value = row->get_by_name("field_types");
+    if (types_value == NULL || types_value->is_null()) {
+      LOG_ERROR("'field_types' column for keyspace '%s' and type '%s' is null",
+                keyspace_name.c_str(), type_name.c_str());
+      continue;
+    }
+
+    CollectionIterator names(names_value);
+    CollectionIterator types(types_value);
+
+    while (names.next()) {
+      if(!types.next()) {
+        LOG_ERROR("The number of types doesn't match the number of names for keyspace '%s' and type '%s' is null",
+                  keyspace_name.c_str(), type_name.c_str());
+        break;
+      }
+    }
+  }
+}
+
 void Schema::update_columns(ResultResponse* result) {
   SharedRefPtr<RefBuffer> buffer = result->buffer();
 
@@ -419,8 +462,8 @@ const TableMetadata::KeyAliases& TableMetadata::key_aliases() const {
       }
     }
     if (key_aliases_.empty()) {// C* 1.2 tables created via CQL2 or thrift don't have col meta or key aliases
-      TypeDescriptor key_validator_type = TypeParser::parse(get_string_field("key_validator"));
-      const size_t count = key_validator_type.component_count();
+      SharedRefPtr<ParseResult> key_validator_type = TypeParser::parse_with_composite(get_string_field("key_validator"));
+      const size_t count = key_validator_type->component_count();
       std::ostringstream ss("key");
       for (size_t i = 0; i < count; ++i) {
         if (i > 0) {

@@ -43,7 +43,7 @@
 #define SELECT_KEYSPACES "SELECT * FROM system.schema_keyspaces"
 #define SELECT_COLUMN_FAMILIES "SELECT * FROM system.schema_columnfamilies"
 #define SELECT_COLUMNS "SELECT * FROM system.schema_columns"
-
+#define SELECT_USERTYPES "SELECT * FROM system.schema_usertypes"
 
 namespace cass {
 
@@ -329,9 +329,11 @@ void ControlConnection::query_meta_all() {
         new ControlMultipleRequestHandler<QueryMetadataAllData>(this, ControlConnection::on_query_meta_all, QueryMetadataAllData()));
   handler->execute_query(SELECT_LOCAL_TOKENS);
   handler->execute_query(SELECT_PEERS_TOKENS);
+
   handler->execute_query(SELECT_KEYSPACES);
   handler->execute_query(SELECT_COLUMN_FAMILIES);
   handler->execute_query(SELECT_COLUMNS);
+  handler->execute_query(SELECT_USERTYPES);
 }
 
 void ControlConnection::on_query_meta_all(ControlConnection* control_connection,
@@ -414,6 +416,7 @@ void ControlConnection::on_query_meta_all(ControlConnection* control_connection,
   session->cluster_meta().update_keyspaces(static_cast<ResultResponse*>(responses[2]));
   session->cluster_meta().update_tables(static_cast<ResultResponse*>(responses[3]),
                                          static_cast<ResultResponse*>(responses[4]));
+  session->cluster_meta().update_usertypes(static_cast<ResultResponse*>(responses[5]));
   session->cluster_meta().build();
 
   if (is_initial_connection) {
