@@ -35,6 +35,34 @@
 
 namespace cass {
 
+int hex_value(int c) {
+  if (c >= '0' && c <= '9') {
+    return c - '0';
+  } else if (c >= 'A' && c <= 'F') {
+    return c - 'A' + 10;
+  } else if (c >= 'a' && c <= 'f') {
+    return c - 'a' + 10;
+  }
+  return -1;
+}
+
+bool from_hex(const std::string& hex, std::string* result) {
+  if ((hex.length() & 1) == 1) { // Invalid if not divisible by 2
+    return false;
+  }
+  size_t size = hex.length() / 2;
+  result->resize(size);
+  for (size_t i = 0; i < size; ++i) {
+    int half0 = hex_value(hex[i * 2]);
+    int half1 = hex_value(hex[i * 2 + 1]);
+    if (half0 < 0 || half1 < 0) {
+      return false;
+    }
+    (*result)[i] = static_cast<char>((static_cast<uint8_t>(half0) << 4) | static_cast<uint8_t>(half1));
+  }
+  return true;
+}
+
 TypeParser::TypeMapper::TypeMapper() {
   name_type_map_["org.apache.cassandra.db.marshal.AsciiType"] = CASS_VALUE_TYPE_ASCII;
   name_type_map_["org.apache.cassandra.db.marshal.LongType"] = CASS_VALUE_TYPE_BIGINT;
@@ -94,7 +122,6 @@ SharedRefPtr<DataType> TypeParser::parse_one(const std::string& type) {
 
   if (is_reversed(type) || frozen) {
     if (!get_nested_class_name(type, &class_name)) {
-      // error
       return SharedRefPtr<DataType>();
     }
   } else {
@@ -107,39 +134,33 @@ SharedRefPtr<DataType> TypeParser::parse_one(const std::string& type) {
   parser.get_next_name(&next);
 
   if (starts_with(next, LIST_TYPE)) {
-    std::vector<std::string> params;
+    TypeParamsVec params;
     if (!parser.get_type_params(&params) || params.empty()) {
-      // error
       return SharedRefPtr<DataType>();
     }
     SharedRefPtr<DataType> element_type(parse_one(params[0]));
     if (!element_type) {
-      // error
       return SharedRefPtr<DataType>();
     }
     return CollectionType::list(element_type, frozen);
   } else if(starts_with(next, SET_TYPE)) {
-    std::vector<std::string> params;
+    TypeParamsVec params;
     if (!parser.get_type_params(&params) || params.empty()) {
-      // error
       return SharedRefPtr<DataType>();
     }
     SharedRefPtr<DataType> element_type(parse_one(params[0]));
     if (!element_type) {
-      // error
       return SharedRefPtr<DataType>();
     }
     return CollectionType::set(element_type, frozen);
   } else if(starts_with(next, MAP_TYPE)) {
-    std::vector<std::string> params;
+    TypeParamsVec params;
     if (!parser.get_type_params(&params) || params.size() < 2) {
-      // error
       return SharedRefPtr<DataType>();
     }
     SharedRefPtr<DataType> key_type(parse_one(params[0]));
     SharedRefPtr<DataType> value_type(parse_one(params[1]));
     if (!key_type || !value_type) {
-      // error
       return SharedRefPtr<DataType>();
     }
     return CollectionType::map(key_type, value_type, frozen);
@@ -155,32 +176,37 @@ SharedRefPtr<DataType> TypeParser::parse_one(const std::string& type) {
 
     std::string keyspace;
     if (!parser.read_one(&keyspace)) {
-      // error
       return SharedRefPtr<DataType>();
     }
     parser.skip_blank_and_comma();
+
+    std::string hex;
+    if (!parser.read_one(&hex)) {
+      return SharedRefPtr<DataType>();
+    }
 
     std::string type_name;
-    if (!parser.read_one(&type_name)) {
-      // error
+    if (!from_hex(hex, &type_name)) {
+      LOG_ERROR("Invalid hex string \"%s\" for parameter", hex.c_str());
       return SharedRefPtr<DataType>();
     }
 
-    // from hex
+    if (keyspace.empty() || type_name.empty()) {
+      LOG_ERROR("UDT has no keyspace or type name");
+      return SharedRefPtr<DataType>();
+    }
 
     parser.skip_blank_and_comma();
-    std::map<std::string, std::string> raw_fields;
+    NameAndTypeParamsVec raw_fields;
     if (!parser.get_name_and_type_params(&raw_fields)) {
-      // error
       return SharedRefPtr<DataType>();
     }
 
     UserType::FieldVec fields;
-    for (std::map<std::string, std::string>::const_iterator i = raw_fields.begin(),
+    for (NameAndTypeParamsVec::const_iterator i = raw_fields.begin(),
          end = raw_fields.end(); i != end; ++i) {
       SharedRefPtr<DataType> data_type = parse_one(i->second);
       if (!data_type) {
-        // error
         return SharedRefPtr<DataType>();
       }
       fields.push_back(UserType::Field(i->first, data_type));
@@ -190,18 +216,16 @@ SharedRefPtr<DataType> TypeParser::parse_one(const std::string& type) {
   }
 
   if (is_tuple_type(type)) {
-    std::vector<std::string> raw_types;
+    TypeParamsVec raw_types;
     if (!parser.get_type_params(&raw_types)) {
-      // error
       return SharedRefPtr<DataType>();
     }
 
     DataTypeVec types;
-    for (std::vector<std::string>::const_iterator i = raw_types.begin(),
+    for (TypeParamsVec::const_iterator i = raw_types.begin(),
          end = raw_types.end(); i != end; ++i) {
       SharedRefPtr<DataType> data_type = parse_one(*i);
       if (!data_type) {
-        // error
         return SharedRefPtr<DataType>();
       }
       types.push_back(data_type);
@@ -224,25 +248,23 @@ SharedRefPtr<ParseResult> TypeParser::parse_with_composite(const std::string& ty
   if (!is_composite(next)) {
     SharedRefPtr<DataType> data_type = parse_one(type);
     if (!data_type) {
-      // error
       return SharedRefPtr<ParseResult>();
     }
     return SharedRefPtr<ParseResult>(new ParseResult(data_type, is_reversed(next)));
   }
 
-  std::vector<std::string> sub_class_names;
+  TypeParamsVec sub_class_names;
 
   if (!parser.get_type_params(&sub_class_names)) {
-    // error
     return SharedRefPtr<ParseResult>();
   }
 
   if (sub_class_names.empty()) {
-    // error
+    LOG_ERROR("Expected at least one subclass type for a composite type");
     return SharedRefPtr<ParseResult>();
   }
 
-  std::map<std::string, SharedRefPtr<DataType> > collections;
+  ParseResult::CollectionMap collections;
   const std::string& last = sub_class_names.back();
   size_t count = sub_class_names.size();
   if (is_collection(last)) {
@@ -250,17 +272,15 @@ SharedRefPtr<ParseResult> TypeParser::parse_with_composite(const std::string& ty
 
     Parser collection_parser(last, 0);
     collection_parser.get_next_name();
-    std::map<std::string, std::string> params;
+    NameAndTypeParamsVec params;
     if (!collection_parser.get_collection_params(&params)) {
-      // error
       return SharedRefPtr<ParseResult>();
     }
 
-    for (std::map<std::string, std::string>::const_iterator i = params.begin(),
+    for (NameAndTypeParamsVec::const_iterator i = params.begin(),
          end = params.end(); i != end; ++i) {
       SharedRefPtr<DataType> data_type = parse_one(i->second);
       if (!data_type) {
-        // error
         return SharedRefPtr<ParseResult>();
       }
       collections[i->first] = data_type;
@@ -268,11 +288,10 @@ SharedRefPtr<ParseResult> TypeParser::parse_with_composite(const std::string& ty
   }
 
   DataTypeVec types;
-  std::vector<bool> reversed;
+  ParseResult::ReversedVec reversed;
   for (size_t i = 0; i < count; ++i) {
     SharedRefPtr<DataType> data_type = parse_one(sub_class_names[i]);
     if (!data_type) {
-      // error
       return SharedRefPtr<ParseResult>();
     }
     types.push_back(data_type);
@@ -285,7 +304,7 @@ SharedRefPtr<ParseResult> TypeParser::parse_with_composite(const std::string& ty
 bool TypeParser::get_nested_class_name(const std::string& type, std::string* class_name) {
   Parser parser(type, 0);
   parser.get_next_name();
-  std::vector<std::string> params;
+  TypeParamsVec params;
   parser.get_type_params(&params);
   if (params.size() != 1) {
     return false;
@@ -312,14 +331,14 @@ void TypeParser::Parser::get_next_name(std::string* name) {
   read_next_identifier(name);
 }
 
-bool TypeParser::Parser::get_type_params(std::vector<std::string>* params) {
+bool TypeParser::Parser::get_type_params(TypeParamsVec* params) {
   if (is_eos()) {
     params->clear();
     return true;
   }
 
   if (str_[index_] != '(') {
-    error_ = "Expected '(' before type parameters";
+    parse_error(str_, index_,  "Expected '(' before type parameters");
     return false;
   }
 
@@ -333,25 +352,16 @@ bool TypeParser::Parser::get_type_params(std::vector<std::string>* params) {
 
     std::string param;
     if (!read_one(&param)) {
-      std::stringstream ss;
-      ss << "Error while parsing \"" << str_ << "\" around char at index "
-         << index_;
-      error_ = ss.str();
       return false;
     }
     params->push_back(param);
   }
 
-
-  std::stringstream ss;
-  ss << "Error while parsing \""
-     << str_ << "\" around char at index "
-     << index_ << ": unexpected end of string";
-  error_ = ss.str();
+  parse_error(str_, index_,  "Unexpected end of string");
   return false;
 }
 
-bool TypeParser::Parser::get_name_and_type_params(std::map<std::string, std::string>* params) {
+bool TypeParser::Parser::get_name_and_type_params(NameAndTypeParamsVec* params) {
   while (skip_blank_and_comma()) {
     if (str_[index_] == ')') {
       ++index_;
@@ -361,13 +371,16 @@ bool TypeParser::Parser::get_name_and_type_params(std::map<std::string, std::str
     std::string hex;
     read_next_identifier(&hex);
 
-    // hex
-    std::string name = hex;
+    std::string name;
+    if (!from_hex(hex, &name)) {
+      LOG_ERROR("Invalid hex string \"%s\" for parameter", hex.c_str());
+      return SharedRefPtr<DataType>();
+    }
 
     skip_blank();
 
     if (str_[index_] != ':') {
-      error_ = "Expecting ':' token";
+      parse_error(str_, index_,  "Expected ':'");
       return false;
     }
 
@@ -377,32 +390,24 @@ bool TypeParser::Parser::get_name_and_type_params(std::map<std::string, std::str
     std::string type;
 
     if (!read_one(&type)) {
-      std::stringstream ss;
-      ss << "Error while parsing \"" << str_ << "\" around char at index "
-         << index_;
-      error_ = ss.str();
       return false;
     }
 
-    params->insert(std::make_pair(name, type));
+    params->push_back(std::make_pair(name, type));
   }
 
-  std::stringstream ss;
-  ss << "Error while parsing \""
-     << str_ << "\" around char at index "
-     << index_ << ": unexpected end of string";
-  error_ = ss.str();
+  parse_error(str_, index_,  "Unexpected end of string");
   return false;
 }
 
-bool TypeParser::Parser::get_collection_params(std::map<std::string, std::string>* params) {
+bool TypeParser::Parser::get_collection_params(NameAndTypeParamsVec* params) {
   if (is_eos()) {
     params->clear();
     return true;
   }
 
   if (str_[index_] != '(') {
-    error_ = "Expected '(' before collection parameters";
+    parse_error(str_, index_,  "Expected '(' before collection parameters");
     return false;
   }
 
@@ -444,11 +449,7 @@ bool TypeParser::Parser::read_raw_arguments(std::string* args) {
   }
 
   if (str_[index_] != '(') {
-    std::stringstream ss;
-    ss << "Expected char at index "  << index_ << " of \""
-       << str_  << "\" to be a '(' but found '"
-       << str_[index_] << "' found";
-    error_ = ss.str();
+    parse_error(str_, index_, "Expected '('");
     return false;
   }
 
@@ -458,7 +459,7 @@ bool TypeParser::Parser::read_raw_arguments(std::string* args) {
     ++index_;
 
     if (is_eos()) {
-      error_ = "expected ')'";
+      parse_error(str_, index_, "Expected ')'");
       return false;
     }
 
@@ -475,10 +476,25 @@ bool TypeParser::Parser::read_raw_arguments(std::string* args) {
 }
 
 void TypeParser::Parser::read_next_identifier(std::string* name) {
-  size_t i = 0;
-  while (!is_eos() && is_identifier_char(str_[i]))
+  size_t i = index_;
+  while (!is_eos() && is_identifier_char(str_[index_]))
     ++index_;
-  if (name != NULL) *name = str_.substr(i, index_ - i);
+  if (name != NULL) {
+    if (index_ > i) {
+      *name = str_.substr(i, index_ - i);
+    } else{
+      name->clear();
+    }
+  }
+}
+
+void TypeParser::Parser::parse_error(const std::string& str,
+                                     size_t index,
+                                     const char* error) {
+  LOG_ERROR("Error parsing '%s' at %u index: %s",
+            str.c_str(),
+            static_cast<unsigned int>(index),
+            error);
 }
 
 } // namespace cass

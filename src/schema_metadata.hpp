@@ -22,7 +22,6 @@
 #include "scoped_lock.hpp"
 #include "scoped_ptr.hpp"
 #include "type_parser.hpp"
-#include "user_type.hpp"
 
 #include <map>
 #include <string>

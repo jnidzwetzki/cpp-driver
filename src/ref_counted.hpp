@@ -143,6 +143,8 @@ public:
   operator bool() const { return ptr_ != NULL; }
 
 private:
+  template<class S> friend class SharedRefPtr;
+
   template<class S>
   void copy(S* ptr) {
     if (ptr == ptr_) return;
@@ -150,7 +152,7 @@ private:
       ptr->inc_ref();
     }
     T* temp = ptr_;
-    ptr_ = static_cast<S*>(ptr);
+    ptr_ = static_cast<T*>(ptr);
     if (temp != NULL) {
       temp->dec_ref();
     }

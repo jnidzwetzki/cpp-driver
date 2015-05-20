@@ -47,6 +47,9 @@ typedef std::vector<SharedRefPtr<DataType> > DataTypeVec;
 
 class ParseResult : public RefCounted<ParseResult> {
 public:
+  typedef std::vector<bool> ReversedVec;
+  typedef std::map<std::string, SharedRefPtr<DataType> > CollectionMap;
+
   ParseResult(SharedRefPtr<DataType> type, bool reversed)
     : is_composite_(false) {
     types_.push_back(type);
@@ -55,8 +58,8 @@ public:
 
   ParseResult(bool is_composite,
               const DataTypeVec& types,
-              std::vector<bool> reversed,
-              std::map<std::string, SharedRefPtr<DataType> > collections)
+              ReversedVec reversed,
+              CollectionMap collections)
     : is_composite_(is_composite)
     , types_(types)
     , reversed_(reversed)
@@ -64,12 +67,17 @@ public:
 
   //size_t component_count() { return type_ == CASS_VALUE_TYPE_CUSTOM ? type_args_.size() : 1; }
   size_t component_count() { return 1; }
-  std::string to_string() const;
 
+  bool is_composite() const { return is_composite_; }
+  const DataTypeVec& types() const { return types_; }
+  const ReversedVec& reversed() const  { return reversed_; }
+  const CollectionMap& collections() const  { return collections_; }
+
+private:
   bool is_composite_;
   DataTypeVec types_;
-  std::vector<bool> reversed_;
-  std::map<std::string, SharedRefPtr<DataType> > collections_;
+  ReversedVec reversed_;
+  CollectionMap collections_;
 };
 
 class CollectionType : public DataType {
@@ -186,30 +194,32 @@ public:
 private:
   static bool get_nested_class_name(const std::string& type, std::string* class_name);
 
+  typedef std::vector<std::string> TypeParamsVec;
+  typedef std::vector<std::pair<std::string, std::string> > NameAndTypeParamsVec;
+
   class Parser {
   public:
     Parser(const std::string& str, size_t index)
       : str_(str)
       , index_(index) {}
 
-    const std::string& error() const {
-      return error_;
-    }
-
     void skip() { ++index_; }
     void skip_blank();
     bool skip_blank_and_comma();
 
-
     bool read_one(std::string* name_and_args);
     void get_next_name(std::string* name = NULL);
-    bool get_type_params(std::vector<std::string>* params);
-    bool get_name_and_type_params(std::map<std::string, std::string>* params);
-    bool get_collection_params(std::map<std::string, std::string>* params);
+    bool get_type_params(TypeParamsVec* params);
+    bool get_name_and_type_params(NameAndTypeParamsVec* params);
+    bool get_collection_params(NameAndTypeParamsVec* params);
 
   private:
     bool read_raw_arguments(std::string* args);
     void read_next_identifier(std::string* name);
+
+    static void parse_error(const std::string& str,
+                            size_t index,
+                            const char* error);
 
     bool is_eos() const {
       return index_ >= str_.length();
@@ -228,7 +238,6 @@ private:
   private:
     const std::string str_;
     size_t index_;
-    std::string error_;
   };
 
   TypeParser();
