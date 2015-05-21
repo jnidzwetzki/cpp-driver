@@ -27,7 +27,7 @@
 #include "batch_request.hpp"
 #include "result_response.hpp"
 #include "row.hpp"
-#include "value.hpp"
+#include "output_value.hpp"
 #include "iterator.hpp"
 #include "ssl.hpp"
 #include "uuids.hpp"
@@ -57,10 +57,10 @@ EXTERNAL_TYPE(cass::Future, CassFuture);
 EXTERNAL_TYPE(cass::Prepared, CassPrepared);
 EXTERNAL_TYPE(cass::BatchRequest, CassBatch);
 EXTERNAL_TYPE(cass::ResultResponse, CassResult);
-EXTERNAL_TYPE(cass::BufferCollection, CassCollection);
+EXTERNAL_TYPE(cass::CollectionInputValue, CassCollection);
 EXTERNAL_TYPE(cass::Iterator, CassIterator);
 EXTERNAL_TYPE(cass::Row, CassRow);
-EXTERNAL_TYPE(cass::Value, CassValue);
+EXTERNAL_TYPE(cass::OutputValue, CassValue);
 EXTERNAL_TYPE(cass::SslContext, CassSsl);
 EXTERNAL_TYPE(cass::Schema, CassSchema);
 EXTERNAL_TYPE(cass::SchemaMetadata, CassSchemaMeta);

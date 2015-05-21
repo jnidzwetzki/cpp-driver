@@ -14,7 +14,7 @@
   limitations under the License.
 */
 
-#include "buffer_collection.hpp"
+#include "output_value.hpp"
 
 #include "types.hpp"
 
@@ -22,8 +22,7 @@
 extern "C" {
 
 CassCollection* cass_collection_new(CassCollectionType type, size_t element_count) {
-  cass::BufferCollection* collection = new cass::BufferCollection(type == CASS_COLLECTION_TYPE_MAP,
-                                                                 element_count);
+  cass::CollectionInputValue* collection = new cass::CollectionInputValue(2, type, element_count);
   collection->inc_ref();
   return CassCollection::to(collection);
 }
@@ -34,31 +33,31 @@ void cass_collection_free(CassCollection* collection) {
 
 CassError cass_collection_append_int32(CassCollection* collection,
                                        cass_int32_t value) {
-  collection->append_int32(value);
+  collection->append(value);
   return CASS_OK;
 }
 
 CassError cass_collection_append_int64(CassCollection* collection,
                                        cass_int64_t value) {
-  collection->append_int64(value);
+  collection->append(value);
   return CASS_OK;
 }
 
 CassError cass_collection_append_float(CassCollection* collection,
                                        cass_float_t value) {
-  collection->append_float(value);
+  collection->append(value);
   return CASS_OK;
 }
 
 CassError cass_collection_append_double(CassCollection* collection,
                                         cass_double_t value) {
-  collection->append_double(value);
+  collection->append(value);
   return CASS_OK;
 }
 
 CassError cass_collection_append_bool(CassCollection* collection,
                                       cass_bool_t value) {
-  collection->append_byte(value == cass_true);
+  collection->append(value == cass_true);
   return CASS_OK;
 }
 
@@ -70,14 +69,16 @@ CassError cass_collection_append_string(CassCollection* collection,
 CassError cass_collection_append_string_n(CassCollection* collection,
                                           const char* value,
                                           size_t value_length) {
-  collection->append(value, value_length);
+  cass::CassString s = { value, value_length };
+  collection->append(s);
   return CASS_OK;
 }
 
 CassError cass_collection_append_bytes(CassCollection* collection,
                                        const cass_byte_t* value,
                                        size_t value_size) {
-  collection->append(value, value_size);
+  cass::CassBytes b = { value, value_size };
+  collection->append(b);
   return CASS_OK;
 }
 
@@ -89,7 +90,7 @@ CassError cass_collection_append_uuid(CassCollection* collection,
 
 CassError cass_collection_append_inet(CassCollection* collection,
                                       CassInet value) {
-  collection->append(value.address, value.address_length);
+  collection->append(value);
   return CASS_OK;
 }
 
@@ -97,55 +98,9 @@ CassError cass_collection_append_decimal(CassCollection* collection,
                                          const cass_byte_t* varint,
                                          size_t varint_size,
                                          cass_int32_t scale) {
-  collection->append(varint, varint_size, scale);
+  cass::CassDecimal d = { varint, varint_size, scale };
+  collection->append(d);
   return CASS_OK;
 }
 
 } // extern "C"
-
-namespace cass {
-
-int BufferCollection::encode(int version, BufferVec* bufs) const {
-  if (version != 1 && version != 2) return -1;
-
-  int value_size = sizeof(uint16_t) + calculate_size(version);
-  int buf_size = sizeof(int32_t) + value_size;
-
-  Buffer buf(buf_size);
-
-  int pos = 0;
-  pos = buf.encode_int32(pos, value_size);
-  pos = buf.encode_uint16(pos, is_map_ ? bufs_.size() / 2 : bufs_.size());
-
-  encode(version, buf.data() + pos);
-
-  bufs->push_back(buf);
-
-  return buf_size;
-}
-
-int BufferCollection::calculate_size(int version) const {
-  if (version != 1 && version != 2) return -1;
-  int value_size = 0;
-  for (BufferVec::const_iterator it = bufs_.begin(),
-      end = bufs_.end(); it != end; ++it) {
-    value_size += sizeof(uint16_t);
-    value_size += it->size();
-  }
-  return value_size;
-}
-
-void BufferCollection::encode(int version, char* buf) const {
-  assert(version == 1 || version == 2);
-  char* pos = buf;
-  for (BufferVec::const_iterator it = bufs_.begin(),
-      end = bufs_.end(); it != end; ++it) {
-    encode_uint16(pos, it->size());
-    pos += sizeof(uint16_t);
-
-    memcpy(pos, it->data(), it->size());
-    pos += it->size();
-  }
-}
-
-}

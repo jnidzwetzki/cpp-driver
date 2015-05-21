@@ -47,7 +47,7 @@ const CassValue* cass_row_get_column_by_name_n(const CassRow* row,
 
 namespace cass {
 
-char* decode_row(char* rows, const ResultResponse* result, ValueVec& output) {
+char* decode_row(char* rows, const ResultResponse* result, OutputValueVec& output) {
   char* buffer = rows;
   output.clear();
 
@@ -63,19 +63,19 @@ char* decode_row(char* rows, const ResultResponse* result, ValueVec& output) {
           type == CASS_VALUE_TYPE_SET) {
         uint16_t count = 0;
         char* data = decode_uint16(buffer, count);
-        output.push_back(Value(&def, count, data, size - sizeof(uint16_t)));
+        output.push_back(OutputValue(&def, count, data, size - sizeof(uint16_t)));
       } else {
-        output.push_back(Value(type, buffer, size));
+        output.push_back(OutputValue(type, buffer, size));
       }
       buffer += size;
     } else { // null value
-      output.push_back(Value());
+      output.push_back(OutputValue());
     }
   }
   return buffer;
 }
 
-const Value* Row::get_by_name(const StringRef& name) const {
+const OutputValue* Row::get_by_name(const StringRef& name) const {
   cass::ResultMetadata::IndexVec indices;
   if (result_->find_column_indices(name, &indices) == 0) {
     return NULL;
@@ -84,12 +84,12 @@ const Value* Row::get_by_name(const StringRef& name) const {
 }
 
 bool Row::get_string_by_name(const StringRef& name, std::string* out) const {
-  const Value* value = get_by_name(name);
+  const OutputValue* value = get_by_name(name);
   if (value == NULL ||
-      value->buffer().size() < 0) {
+      value->size() < 0) {
     return false;
   }
-  out->assign(value->buffer().data(), value->buffer().size());
+  out->assign(value->data(), value->size());
   return true;
 }
 

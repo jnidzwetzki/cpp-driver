@@ -139,8 +139,8 @@ void NetworkTopologyStrategy::build_dc_replicas(const SchemaMetadataField* strat
   if (strategy_options != NULL) {
     MapIterator itr(strategy_options->value());
     while (itr.next()) {
-      StringRef key = itr.key()->buffer().to_string_ref();
-      StringRef value = itr.value()->buffer().to_string_ref();
+      StringRef key = itr.key()->to_string_ref();
+      StringRef value = itr.value()->to_string_ref();
       if (key != "class") {
         size_t replica_count = strtoul(value.to_string().c_str(), NULL, 10);
         if (replica_count > 0) {
@@ -190,8 +190,8 @@ size_t SimpleStrategy::get_replication_factor(const SchemaMetadataField* strateg
   if (strategy_options != NULL) {
     MapIterator itr(strategy_options->value());
     while (itr.next()) {
-      StringRef key = itr.key()->buffer().to_string_ref();
-      StringRef value = itr.value()->buffer().to_string_ref();
+      StringRef key = itr.key()->to_string_ref();
+      StringRef value = itr.value()->to_string_ref();
       if (key == "replication_factor") {
         return strtoul(value.to_string().c_str(), NULL, 10);
       }

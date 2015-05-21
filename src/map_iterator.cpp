@@ -22,10 +22,10 @@ char* MapIterator::decode_pair(char* position) {
   uint16_t size;
 
   position = decode_uint16(position, size);
-  key_ = Value(map_->primary_type(), position, size);
+  key_ = OutputValue(map_->primary_type(), position, size);
 
   position = decode_uint16(position + size, size);
-  value_ = Value(map_->secondary_type(), position, size);
+  value_ = OutputValue(map_->secondary_type(), position, size);
 
   return position + size;
 }

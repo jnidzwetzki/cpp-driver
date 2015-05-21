@@ -18,7 +18,7 @@
 #define __CASS_TYPE_PARSER_HPP_INCLUDED__
 
 #include "cassandra.h"
-#include "value.hpp"
+#include "output_value.hpp"
 #include "ref_counted.hpp"
 
 #include <list>
@@ -64,9 +64,6 @@ public:
     , types_(types)
     , reversed_(reversed)
     , collections_(collections) { }
-
-  //size_t component_count() { return type_ == CASS_VALUE_TYPE_CUSTOM ? type_args_.size() : 1; }
-  size_t component_count() { return 1; }
 
   bool is_composite() const { return is_composite_; }
   const DataTypeVec& types() const { return types_; }

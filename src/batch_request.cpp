@@ -57,8 +57,6 @@ int BatchRequest::encode(int version, BufferVec* bufs) const {
 }
 
 int BatchRequest::encode_v2(BufferVec* bufs) const {
-  const int version = 2;
-
   size_t length = 0;
 
   {
@@ -107,7 +105,7 @@ int BatchRequest::encode_v2(BufferVec* bufs) const {
 
     buf.encode_uint16(pos, statement->values_count());
     if (statement->values_count() > 0) {
-      length += statement->encode_values(version, bufs);
+      length += statement->encode_values(bufs);
     }
   }
 

@@ -801,18 +801,9 @@ void Connection::PendingWriteBase::on_write(uv_write_t* req, int status) {
 
 void Connection::PendingWrite::flush() {
   if (!is_flushed_ && !buffers_.empty()) {
-    UvBufVec bufs;
-
-    bufs.reserve(buffers_.size());
-
-    for (BufferVec::const_iterator it = buffers_.begin(),
-         end = buffers_.end(); it != end; ++it) {
-      bufs.push_back(uv_buf_init(const_cast<char*>(it->data()), it->size()));
-    }
-
     is_flushed_ = true;
     uv_stream_t* sock_stream = copy_cast<uv_tcp_t*, uv_stream_t*>(&connection_->socket_);
-    uv_write(&req_, sock_stream, bufs.data(), bufs.size(), PendingWrite::on_write);
+    uv_write(&req_, sock_stream, buffers_.data(), buffers_.size(), PendingWrite::on_write);
   }
 }
 
@@ -872,13 +863,6 @@ void Connection::PendingWriteSsl::flush() {
   if (!is_flushed_ && !buffers_.empty()) {
     SslSession* ssl_session = connection_->ssl_session_.get();
 
-    uv_bufs_.reserve(buffers_.size());
-
-    for (BufferVec::const_iterator it = buffers_.begin(),
-         end = buffers_.end(); it != end; ++it) {
-      uv_bufs_.push_back(uv_buf_init(const_cast<char*>(it->data()), it->size()));
-    }
-
     rb::RingBuffer::Position prev_pos = ssl_session->outgoing().write_position();
 
     encrypt();
@@ -889,7 +873,7 @@ void Connection::PendingWriteSsl::flush() {
     LOG_TRACE("Sending %u encrypted bytes", static_cast<unsigned int>(encrypted_size_));
 
     uv_stream_t* sock_stream = copy_cast<uv_tcp_t*, uv_stream_t*>(&connection_->socket_);
-    uv_write(&req_, sock_stream, bufs.data(), bufs.size(), PendingWriteSsl::on_write);
+    uv_write(&req_, sock_stream, buffers_.data(), buffers_.size(), PendingWriteSsl::on_write);
 
     is_flushed_ = true;
   }

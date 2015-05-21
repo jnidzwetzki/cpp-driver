@@ -290,7 +290,8 @@ CassError cass_statement_bind_decimal(CassStatement* statement,
                                       const cass_byte_t* varint,
                                       size_t varint_size,
                                       cass_int32_t scale) {
-  return statement->bind(index, varint, varint_size, scale);
+  cass::CassDecimal d = { varint, varint_size, scale };
+  return statement->bind(index, d);
 }
 
 CassError cass_statement_bind_collection(CassStatement* statement, size_t index,
@@ -521,34 +522,12 @@ CassError cass_statement_bind_collection_by_name_n(CassStatement* statement,
 
 namespace cass {
 
-static int32_t decode_buffer_size(const Buffer& buffer) {
-  if (!buffer.is_buffer()) {
-    LOG_ERROR("Routing key cannot contain an empty value or a collection");
-    return -1;
-  }
-  int32_t size;
-  decode_int32(const_cast<char*>(buffer.data()), size);
-  if (size < 0) {
-    LOG_ERROR("Routing key cannot contain a null value");
-  }
-  return size;
-}
-
-int32_t Statement::encode_values(int version, BufferVec* bufs) const {
+int32_t Statement::encode_values(BufferVec* bufs) const {
   int32_t values_size = 0;
-  for (ValueVec::const_iterator it = values_.begin(), end = values_.end();
-       it != end; ++it) {
-    if (it->is_empty()) {
-      Buffer buf(sizeof(int32_t));
-      buf.encode_int32(0, -1); // [bytes] "null"
-      bufs->push_back(buf);
-      values_size += sizeof(int32_t);
-    } else if (it->is_collection()) {
-      values_size += it->collection()->encode(version, bufs);
-    } else {
-      bufs->push_back(*it);
-      values_size += it->size();
-    }
+  for (InputValueVec::const_iterator i = values_.begin(), end = values_.end();
+       i != end; ++i) {
+    bufs->push_back((*i)->encode());
+    values_size += bufs->back().size();
   }
   return values_size;
 }
@@ -558,20 +537,29 @@ bool Statement::get_routing_key(std::string* routing_key)  const {
 
   if (key_indices_.size() == 1) {
       assert(key_indices_.front() < values_.size());
-      const Buffer& buffer = values_[key_indices_.front()];
-      int32_t size = decode_buffer_size(buffer);
-      if (size < 0) return false;
-      routing_key->assign(buffer.data() + sizeof(int32_t), size);
+      const SharedRefPtr<const InputValue>& value = values_[key_indices_.front()];
+      // TODO: Routing key check
+      if (value->type() != InputValue::SIMPLE &&
+          value->type() != InputValue::USER_TYPE) {
+        LOG_ERROR("Routing key cannot contain a collection or null value");
+        return false;
+      }
+      Buffer encoded = value->encode();
+      routing_key->assign(encoded.data() + sizeof(int32_t), encoded.size());
   } else {
     size_t length = 0;
 
     for (std::vector<size_t>::const_iterator i = key_indices_.begin();
          i != key_indices_.end(); ++i) {
       assert(*i < values_.size());
-      const Buffer& buffer = values_[*i];
-      int32_t size = decode_buffer_size(buffer);
-      if (size < 0) return false;
-      length += sizeof(uint16_t) + size + 1;
+      const SharedRefPtr<const InputValue>& value = values_[*i];
+      // TODO: Routing key check
+      if (value->type() != InputValue::SIMPLE &&
+          value->type() != InputValue::USER_TYPE) {
+        LOG_ERROR("Routing key cannot contain a collection or null value");
+        return false;
+      }
+      length += sizeof(uint16_t) + value->get_size() + 1;
     }
 
     routing_key->clear();
@@ -579,13 +567,13 @@ bool Statement::get_routing_key(std::string* routing_key)  const {
 
     for (std::vector<size_t>::const_iterator i = key_indices_.begin();
          i != key_indices_.end(); ++i) {
-      const Buffer& buffer = values_[*i];
-      int32_t size;
+
+      Buffer encoded = values_[*i]->encode();
+
       char size_buf[sizeof(uint16_t)];
-      decode_int32(const_cast<char*>(buffer.data()), size);
-      encode_uint16(size_buf, size);
+      encode_uint16(size_buf, encoded.size());
       routing_key->append(size_buf, sizeof(uint16_t));
-      routing_key->append(buffer.data() + sizeof(int32_t), size);
+      routing_key->append(encoded.data() + sizeof(int32_t), encoded.size());
       routing_key->push_back(0);
     }
   }

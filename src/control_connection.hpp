@@ -35,13 +35,13 @@ class Request;
 class Row;
 class Session;
 class Timer;
-class Value;
+class OutputValue;
 
 class ControlConnection : public Connection::Listener {
 public:
   static bool determine_address_for_peer_host(const Address& connected_address,
-                                              const Value* peer_value,
-                                              const Value* rpc_value,
+                                              const OutputValue* peer_value,
+                                              const OutputValue* rpc_value,
                                               Address* output);
 
   enum State {
@@ -199,6 +199,12 @@ private:
   static void on_refresh_table(ControlConnection* control_connection,
                                const RefreshTableData& data,
                                const MultipleRequestHandler::ResponseVec& responses);
+
+  void refresh_type(const StringRef& keyspace_name,
+                        const StringRef& type_name);
+  static void on_refresh_type(ControlConnection* control_connection,
+                              const std::pair<std::string, std::string>& keyspace_and_type_names,
+                              Response* response);
 
 private:
   State state_;

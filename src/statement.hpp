@@ -18,7 +18,7 @@
 #define __CASS_STATEMENT_HPP_INCLUDED__
 
 #include "buffer.hpp"
-#include "buffer_collection.hpp"
+#include "input_value.hpp"
 #include "macros.hpp"
 #include "request.hpp"
 
@@ -31,29 +31,6 @@
   }
 
 namespace cass {
-
-struct CassNull {};
-
-struct CassBytes {
-  const cass_byte_t* data;
-  size_t size;
-};
-
-struct CassString {
-  const char* data;
-  size_t length;
-};
-
-struct CassCustom {
-  uint8_t** output;
-  size_t output_size;
-};
-
-struct CassDecimal {
-  const cass_byte_t* varint;
-  size_t varint_size;
-  cass_int32_t scale;
-};
 
 class Statement : public RoutableRequest {
 public:
@@ -104,103 +81,62 @@ public:
 
   virtual bool get_routing_key(std::string* routing_key)  const;
 
-#define BIND_FIXED_TYPE(DeclType, EncodeType)						\
-  CassError bind(size_t index, const DeclType& value) { \
-    CASS_VALUE_CHECK_INDEX(index);                      \
-    Buffer buf(sizeof(int32_t) + sizeof(DeclType));     \
-    size_t pos = buf.encode_int32(0, sizeof(DeclType)); \
-    buf.encode_##EncodeType(pos, value);                \
-    values_[index] = buf;                               \
-    return CASS_OK;                                     \
+#define BIND_TYPE(DeclType) \
+  CassError bind(size_t index, const DeclType value) { \
+    CASS_VALUE_CHECK_INDEX(index); \
+    values_[index] \
+      = SharedRefPtr<const InputValue>(new SimpleInputValue(value)); \
+    return CASS_OK; \
   }
-
-  BIND_FIXED_TYPE(int32_t, int32)
-  BIND_FIXED_TYPE(cass_int64_t, int64)
-  BIND_FIXED_TYPE(float, float)
-  BIND_FIXED_TYPE(double, double)
-  BIND_FIXED_TYPE(bool, bool)
-#undef BIND_FIXED_TYPE
+  BIND_TYPE(cass_int32_t)
+  BIND_TYPE(cass_int64_t)
+  BIND_TYPE(cass_float_t)
+  BIND_TYPE(cass_double_t)
+  BIND_TYPE(bool)
+  BIND_TYPE(CassString)
+  BIND_TYPE(CassBytes)
+  BIND_TYPE(CassUuid)
+  BIND_TYPE(CassInet)
+  BIND_TYPE(CassDecimal)
+#undef BIND_TYPE
 
   CassError bind(size_t index, CassNull) {
     CASS_VALUE_CHECK_INDEX(index);
-    Buffer buf(sizeof(int32_t));
-    buf.encode_int32(0, -1); // [bytes] "null"
-    values_[index] = buf;
-    return CASS_OK;
-  }
-
-  CassError bind(size_t index, CassString value) {
-    return bind(index, value.data, value.length);
-  }
-
-  CassError bind(size_t index, CassBytes value) {
-    return bind(index, value.data, value.size);
-  }
-
-  CassError bind(size_t index, CassUuid value) {
-    CASS_VALUE_CHECK_INDEX(index);
-    Buffer buf(sizeof(int32_t) + sizeof(CassUuid));
-    size_t pos = buf.encode_int32(0, sizeof(CassUuid));
-    buf.encode_uuid(pos, value);
-    values_[index] = buf;
-    return CASS_OK;
-  }
-
-  CassError bind(size_t index, CassInet value) {
-    return bind(index, value.address, value.address_length);
-  }
-
-  CassError bind(size_t index, CassDecimal value) {
-    return bind(index, value.varint, value.varint_size, value.scale);
-  }
-
-  CassError bind(size_t index, const uint8_t* varint, size_t varint_size, int32_t scale) {
-    CASS_VALUE_CHECK_INDEX(index);
-    Buffer buf(sizeof(int32_t) + sizeof(int32_t) + varint_size);
-    size_t pos = buf.encode_int32(0, sizeof(int32_t) + varint_size);
-    pos = buf.encode_int32(pos, scale);
-    buf.copy(pos, varint, varint_size);
-    values_[index] = buf;
-    return CASS_OK;
-  }
-
-  CassError bind(size_t index, const BufferCollection* collection) {
-    CASS_VALUE_CHECK_INDEX(index);
-    if (collection->is_map() && collection->item_count() % 2 != 0) {
-      return CASS_ERROR_LIB_INVALID_ITEM_COUNT;
-    }
-    values_[index] = Buffer(collection);
+    values_[index] = SharedRefPtr<const InputValue>(new NullInputValue());
     return CASS_OK;
   }
 
   CassError bind(size_t index, CassCustom custom) {
     CASS_VALUE_CHECK_INDEX(index);
-    Buffer buf(4 + custom.output_size);
-    size_t pos = buf.encode_int32(0, custom.output_size);
-    *(custom.output) = reinterpret_cast<uint8_t*>(buf.data() + pos);
-    values_[index] = buf;
+    SharedRefPtr<CustomInputValue> output(new CustomInputValue(custom.output_size));
+    *(custom.output) = reinterpret_cast<uint8_t*>(output->data());
+    values_[index] = static_cast<SharedRefPtr<const InputValue> >(output);
     return CASS_OK;
   }
 
-  CassError bind(size_t index, const char* value, size_t value_length) {
+  CassError bind(size_t index, const CollectionInputValue* collection) {
     CASS_VALUE_CHECK_INDEX(index);
-    Buffer buf(sizeof(int32_t) + value_length);
-    size_t pos = buf.encode_int32(0, value_length);
-    buf.copy(pos, value, value_length);
-    values_[index] = buf;
+    if (collection->collection_type() == CASS_COLLECTION_TYPE_MAP &&
+        collection->items().size() % 2 != 0) {
+      return CASS_ERROR_LIB_INVALID_ITEM_COUNT;
+    }
+    values_[index] = SharedRefPtr<const InputValue>(collection);
     return CASS_OK;
   }
 
-  CassError bind(size_t index, const uint8_t* value, size_t value_length) {
-    return bind(index, reinterpret_cast<const char*>(value), value_length);
+  CassError bind(size_t index, const UserTypeInputValue* user_type) {
+    CASS_VALUE_CHECK_INDEX(index);
+    values_[index] = SharedRefPtr<const InputValue>(user_type);
+    return CASS_OK;
   }
 
-  int32_t encode_values(int version, BufferVec*  bufs) const;
+  int32_t encode_values(BufferVec*  bufs) const;
 
 private:
   typedef BufferVec ValueVec;
 
-  ValueVec values_;
+  InputValueVec values_;
+
   bool skip_metadata_;
   int32_t page_size_;
   std::string paging_state_;

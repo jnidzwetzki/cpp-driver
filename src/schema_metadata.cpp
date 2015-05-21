@@ -17,8 +17,8 @@
 #include "schema_metadata.hpp"
 
 #include "buffer.hpp"
-#include "buffer_collection.hpp"
 #include "collection_iterator.hpp"
+#include "output_value.hpp"
 #include "iterator.hpp"
 #include "logger.hpp"
 #include "map_iterator.hpp"
@@ -26,7 +26,7 @@
 #include "row.hpp"
 #include "row_iterator.hpp"
 #include "types.hpp"
-#include "value.hpp"
+#include "output_value.hpp"
 
 #include "third_party/rapidjson/rapidjson/document.h"
 
@@ -190,6 +190,8 @@ void Schema::update_usertypes(ResultResponse* usertypes_result) {
   usertypes_result->decode_first_row();
   ResultIterator rows(usertypes_result);
 
+  ScopedPtr<UserTypeMap> user_types(new UserTypeMap);
+
   while (rows.next()) {
     std::string keyspace_name;
     std::string type_name;
@@ -201,16 +203,16 @@ void Schema::update_usertypes(ResultResponse* usertypes_result) {
       continue;
     }
 
-    const Value* names_value = row->get_by_name("field_names");
+    const OutputValue* names_value = row->get_by_name("field_names");
     if (names_value == NULL || names_value->is_null()) {
-      LOG_ERROR("'field_names' column for keyspace '%s' and type '%s' is null",
+      LOG_ERROR("'field_name's column for keyspace \"%s\" and type \"%s\" is null",
                 keyspace_name.c_str(), type_name.c_str());
       continue;
     }
 
-    const Value* types_value = row->get_by_name("field_types");
+    const OutputValue* types_value = row->get_by_name("field_types");
     if (types_value == NULL || types_value->is_null()) {
-      LOG_ERROR("'field_types' column for keyspace '%s' and type '%s' is null",
+      LOG_ERROR("'field_type's column for keyspace '%s' and type '%s' is null",
                 keyspace_name.c_str(), type_name.c_str());
       continue;
     }
@@ -218,14 +220,43 @@ void Schema::update_usertypes(ResultResponse* usertypes_result) {
     CollectionIterator names(names_value);
     CollectionIterator types(types_value);
 
+    UserType::FieldVec fields;
+
     while (names.next()) {
       if(!types.next()) {
-        LOG_ERROR("The number of types doesn't match the number of names for keyspace '%s' and type '%s' is null",
+        LOG_ERROR("The number of 'field_type's doesn\"t match the number of field_names for keyspace \"%s\" and type \"%s\"",
                   keyspace_name.c_str(), type_name.c_str());
         break;
       }
+
+      const cass::OutputValue* name = names.value();
+      const cass::OutputValue* type = types.value();
+
+      if (name->is_null() || type->is_null()) {
+        LOG_ERROR("'field_name' or 'field_type' is null for keyspace \"%s\" and type \"%s\"",
+                  keyspace_name.c_str(), type_name.c_str());
+        break;
+      }
+
+      std::string field_name(name->to_string());
+
+      SharedRefPtr<DataType> data_type = TypeParser::parse_one(type->to_string());
+      if (!data_type) {
+        LOG_ERROR("Invalid 'field_type' for field \"%s\", keyspace \"%s\" and type \"%s\"",
+                  field_name.c_str(),
+                  keyspace_name.c_str(),
+                  type_name.c_str());
+        break;
+      }
+
+      fields.push_back(UserType::Field(field_name, data_type));
     }
+
+    (*user_types)[keyspace_name][type_name]
+        = SharedRefPtr<UserType>(new UserType(keyspace_name, type_name, fields));
   }
+
+  user_types_ = user_types.release();
 }
 
 void Schema::update_columns(ResultResponse* result) {
@@ -287,13 +318,13 @@ const SchemaMetadataField* SchemaMetadata::get_field(const std::string& name) co
 std::string SchemaMetadata::get_string_field(const std::string& name) const {
   const SchemaMetadataField* field = get_field(name);
   if (field == NULL) return std::string();
-  return field->value()->buffer().to_string();
+  return field->value()->to_string();
 }
 
 void SchemaMetadata::add_field(const SharedRefPtr<RefBuffer>& buffer, const Row* row, const std::string& name) {
-  const Value* value = row->get_by_name(name);
+  const OutputValue* value = row->get_by_name(name);
   if (value == NULL) return;
-  if (value->buffer().size() <= 0) {
+  if (value->size() <= 0) {
     fields_[name] = SchemaMetadataField(name);
     return;
   }
@@ -301,16 +332,16 @@ void SchemaMetadata::add_field(const SharedRefPtr<RefBuffer>& buffer, const Row*
 }
 
 void SchemaMetadata::add_json_list_field(int version, const Row* row, const std::string& name) {
-  const Value* value = row->get_by_name(name);
+  const OutputValue* value = row->get_by_name(name);
   if (value == NULL) return;
-  if (value->buffer().size() <= 0) {
+  if (value->size() <= 0) {
     fields_[name] = SchemaMetadataField(name);
     return;
   }
 
-  int32_t buffer_size = value->buffer().size();
+  int32_t buffer_size = value->size();
   ScopedPtr<char[]> buf(new char[buffer_size + 1]);
-  memcpy(buf.get(), value->buffer().data(), buffer_size);
+  memcpy(buf.get(), value->data(), buffer_size);
   buf[buffer_size] = '\0';
 
   rapidjson::Document d;
@@ -327,36 +358,33 @@ void SchemaMetadata::add_json_list_field(int version, const Row* row, const std:
     return;
   }
 
-  BufferCollection collection(false, d.Size());
+  CollectionInputValue collection(version, CASS_COLLECTION_TYPE_LIST, d.Size());
   for (rapidjson::Value::ConstValueIterator i = d.Begin(); i != d.End(); ++i) {
-    collection.append(i->GetString(), i->GetStringLength());
+    collection.append(cass::CassString(i->GetString(), i->GetStringLength()));
   }
 
-  int encoded_size = collection.calculate_size(version);
-  SharedRefPtr<RefBuffer> encoded(RefBuffer::create(encoded_size));
+  Buffer encoded = collection.encode();
 
-  collection.encode(version, encoded->data());
-
-  Value map(CASS_VALUE_TYPE_LIST,
+  OutputValue map(CASS_VALUE_TYPE_LIST,
             CASS_VALUE_TYPE_TEXT,
             CASS_VALUE_TYPE_UNKNOWN,
             d.Size(),
-            encoded->data(),
-            encoded_size);
-  fields_[name] = SchemaMetadataField(name, map, encoded);
+            encoded.data(),
+            encoded.size());
+  fields_[name] = SchemaMetadataField(name, map, encoded.buffer());
 }
 
 void SchemaMetadata::add_json_map_field(int version, const Row* row, const std::string& name) {
-  const Value* value = row->get_by_name(name);
+  const OutputValue* value = row->get_by_name(name);
   if (value == NULL) return;
-  if (value->buffer().size() <= 0) {
+  if (value->size() <= 0) {
     fields_[name] = SchemaMetadataField(name);
     return;
   }
 
-  int32_t buffer_size = value->buffer().size();
+  int32_t buffer_size = value->size();
   ScopedPtr<char[]> buf(new char[buffer_size + 1]);
-  memcpy(buf.get(), value->buffer().data(), buffer_size);
+  memcpy(buf.get(), value->data(), buffer_size);
   buf[buffer_size] = '\0';
 
   rapidjson::Document d;
@@ -373,24 +401,21 @@ void SchemaMetadata::add_json_map_field(int version, const Row* row, const std::
     return;
   }
 
-  BufferCollection collection(true, 2 * d.MemberCount());
+  CollectionInputValue collection(version, CASS_COLLECTION_TYPE_MAP, 2 * d.MemberCount());
   for (rapidjson::Value::ConstMemberIterator i = d.MemberBegin(); i != d.MemberEnd(); ++i) {
-    collection.append(i->name.GetString(), i->name.GetStringLength());
-    collection.append(i->value.GetString(), i->value.GetStringLength());
+    collection.append(CassString(i->name.GetString(), i->name.GetStringLength()));
+    collection.append(CassString(i->value.GetString(), i->value.GetStringLength()));
   }
 
-  int encoded_size = collection.calculate_size(version);
-  SharedRefPtr<RefBuffer> encoded(RefBuffer::create(encoded_size));
+  Buffer encoded = collection.encode();
 
-  collection.encode(version, encoded->data());
-
-  Value map(CASS_VALUE_TYPE_MAP,
+  OutputValue map(CASS_VALUE_TYPE_MAP,
             CASS_VALUE_TYPE_TEXT,
             CASS_VALUE_TYPE_TEXT,
             d.MemberCount(),
-            encoded->data(),
-            encoded_size);
-  fields_[name] = SchemaMetadataField(name, map, encoded);
+            encoded.data(),
+            encoded.size());
+  fields_[name] = SchemaMetadataField(name, map, encoded.buffer());
 }
 
 const SchemaMetadata* KeyspaceMetadata::get_entry(const std::string& name) const {
@@ -457,13 +482,12 @@ const TableMetadata::KeyAliases& TableMetadata::key_aliases() const {
       CollectionIterator itr(aliases->value());
       size_t i = 0;
       while (itr.next()) {
-        const BufferPiece& buf = itr.value()->buffer();
-        key_aliases_[i++].assign(buf.data(), buf.size());
+        key_aliases_[i++].assign(itr.value()->data(), itr.value()->size());
       }
     }
     if (key_aliases_.empty()) {// C* 1.2 tables created via CQL2 or thrift don't have col meta or key aliases
       SharedRefPtr<ParseResult> key_validator_type = TypeParser::parse_with_composite(get_string_field("key_validator"));
-      const size_t count = key_validator_type->component_count();
+      const size_t count = key_validator_type->types().size();
       std::ostringstream ss("key");
       for (size_t i = 0; i < count; ++i) {
         if (i > 0) {

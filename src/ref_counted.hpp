@@ -23,6 +23,7 @@
 
 #include <assert.h>
 #include <new>
+#include <uv.h>
 
 namespace cass {
 

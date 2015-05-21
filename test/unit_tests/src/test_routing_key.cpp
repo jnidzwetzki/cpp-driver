@@ -102,7 +102,8 @@ BOOST_AUTO_TEST_CASE(single)
     cass::QueryRequest query(1);
 
     const char* value = "abcdefghijklmnop";
-    query.bind(0, value, strlen(value));
+    cass::CassString s = { value, strlen(value) };
+    query.bind(0, s);
     query.add_key_index(0);
 
     std::string routing_key;
@@ -141,7 +142,8 @@ BOOST_AUTO_TEST_CASE(composite)
     query.add_key_index(1);
 
     const char* value = "abcdefghijklmnop";
-    query.bind(2, value, strlen(value));
+    cass::CassString s = { value, strlen(value) };
+    query.bind(2, s);
     query.add_key_index(2);
 
     std::string routing_key;
@@ -161,7 +163,8 @@ BOOST_AUTO_TEST_CASE(composite)
     query.add_key_index(1);
 
     const char* value = "xyz";
-    query.bind(2, value, strlen(value));
+    cass::CassString s = { value, strlen(value) };
+    query.bind(2, s);
     query.add_key_index(2);
 
     std::string routing_key;

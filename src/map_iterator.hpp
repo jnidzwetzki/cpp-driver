@@ -19,28 +19,28 @@
 
 #include "cassandra.h"
 #include "iterator.hpp"
-#include "value.hpp"
+#include "output_value.hpp"
 #include "serialization.hpp"
 
 namespace cass {
 
 class MapIterator : public Iterator {
 public:
-  MapIterator(const Value* map)
+  MapIterator(const OutputValue* map)
       : Iterator(CASS_ITERATOR_TYPE_MAP)
       , map_(map)
-      , position_(map->buffer().data())
+      , position_(map->data())
       , index_(-1)
       , count_(map_->count()) {}
 
   virtual bool next();
 
-  const Value* key() {
+  const OutputValue* key() {
     assert(index_ >= 0 && index_ < count_);
     return &key_;
   }
 
-  const Value* value() {
+  const OutputValue* value() {
     assert(index_ >= 0 && index_ < count_);
     return &value_;
   }
@@ -49,10 +49,10 @@ private:
   char* decode_pair(char* position);
 
 private:
-  const Value* map_;
+  const OutputValue* map_;
   char* position_;
-  Value key_;
-  Value value_;
+  OutputValue key_;
+  OutputValue value_;
   int32_t index_;
   const int32_t count_;
 };

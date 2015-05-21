@@ -70,7 +70,7 @@ public:
     : name_(name) {}
 
   SchemaMetadataField(const std::string& name,
-                      const Value& value,
+                      const OutputValue& value,
                       const SharedRefPtr<RefBuffer>& buffer)
     : name_(name)
     , value_(value)
@@ -80,13 +80,13 @@ public:
     return name_;
   }
 
-  const Value* value() const {
+  const OutputValue* value() const {
     return &value_;
   }
 
 private:
   std::string name_;
-  Value value_;
+  OutputValue value_;
   SharedRefPtr<RefBuffer> buffer_;
 };
 
@@ -218,12 +218,11 @@ class Schema {
 public:
   typedef SchemaMetadataIteratorImpl<KeyspaceMetadata> KeyspaceIterator;
   typedef std::map<std::string, KeyspaceMetadata*> KeyspacePointerMap;
-
-  typedef std::map<std::string, std::map<std::string, UserType> > UserTypeMap;
+  typedef std::map<std::string, std::map<std::string, SharedRefPtr<UserType> > > UserTypeMap;
 
   Schema()
     : keyspaces_(new KeyspaceMetadata::Map)
-    , usertypes_(new UserTypeMap)
+    , user_types_(new UserTypeMap)
     , protocol_version_(0) {}
 
   void set_protocol_version(int version) {
@@ -251,7 +250,7 @@ private:
   // Really coarse grain copy-on-write. This could be made
   // more fine grain, but it might not be worth the work.
   CopyOnWritePtr<KeyspaceMetadata::Map> keyspaces_;
-  CopyOnWritePtr<UserTypeMap> usertypes_;
+  CopyOnWritePtr<UserTypeMap> user_types_;
 
   // Only used internally on a single thread, there's
   // no need for copy-on-write.

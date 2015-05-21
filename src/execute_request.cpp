@@ -29,8 +29,6 @@ int ExecuteRequest::encode(int version, BufferVec* bufs) const {
 }
 
 int ExecuteRequest::encode_v1(BufferVec* bufs) const {
-  const int version = 1;
-
   size_t length = 0;
 
   const std::string& prepared_id = prepared_->id();
@@ -49,7 +47,7 @@ int ExecuteRequest::encode_v1(BufferVec* bufs) const {
                                  prepared_id.size());
     buf.encode_uint16(pos, values_count());
     // <value_1>...<value_n>
-    length += encode_values(version, bufs);
+    length += encode_values(bufs);
   }
 
   {
@@ -66,8 +64,6 @@ int ExecuteRequest::encode_v1(BufferVec* bufs) const {
 }
 
 int ExecuteRequest::encode_v2(BufferVec* bufs) const {
-  const int version = 2;
-
   uint8_t flags = 0;
   size_t length = 0;
 
@@ -115,7 +111,7 @@ int ExecuteRequest::encode_v2(BufferVec* bufs) const {
 
     if (values_count() > 0) {
       buf.encode_uint16(pos, values_count());
-      length += encode_values(version, bufs);
+      length += encode_values(bufs);
     }
   }
 

@@ -66,14 +66,14 @@ private:
 };
 
 bool ControlConnection::determine_address_for_peer_host(const Address& connected_address,
-                                                        const Value* peer_value,
-                                                        const Value* rpc_value,
+                                                        const OutputValue* peer_value,
+                                                        const OutputValue* rpc_value,
                                                         Address* output) {
   Address peer_address;
-  Address::from_inet(peer_value->buffer().data(), peer_value->buffer().size(),
+  Address::from_inet(peer_value->data(), peer_value->size(),
                      connected_address.port(), &peer_address);
-  if (rpc_value->buffer().size() > 0) {
-    Address::from_inet(rpc_value->buffer().data(), rpc_value->buffer().size(),
+  if (rpc_value->size() > 0) {
+    Address::from_inet(rpc_value->data(), rpc_value->size(),
                        connected_address.port(), output);
     if (connected_address.compare(*output) == 0 ||
         connected_address.compare(peer_address) == 0) {
@@ -294,25 +294,36 @@ void ControlConnection::on_event(EventResponse* response) {
       LOG_DEBUG("Schema change (%d): %.*s %.*s\n",
                 response->schema_change(),
                 (int)response->keyspace().size(), response->keyspace().data(),
-                (int)response->table().size(), response->table().data());
+                (int)response->table_or_type().size(), response->table_or_type().data());
       switch (response->schema_change()) {
         case EventResponse::CREATED:
         case EventResponse::UPDATED:
-          if (response->table().size() > 0) {
-            refresh_table(response->keyspace(), response->table());
-          } else {
-            refresh_keyspace(response->keyspace());
+          switch (response->schema_change_target()) {
+            case EventResponse::KEYSPACE:
+              refresh_keyspace(response->keyspace());
+              break;
+            case EventResponse::TABLE:
+              refresh_table(response->keyspace(), response->table_or_type());
+              break;
+            case EventResponse::TYPE:
+              break;
           }
           break;
 
         case EventResponse::DROPPED:
-          if (response->table().size() > 0) {
-            session_->cluster_meta().drop_table(response->keyspace().to_string(),
-                                                response->table().to_string());
-          } else {
-            session_->cluster_meta().drop_keyspace(response->keyspace().to_string());
+          switch (response->schema_change_target()) {
+            case EventResponse::KEYSPACE:
+              session_->cluster_meta().drop_keyspace(response->keyspace().to_string());
+              break;
+            case EventResponse::TABLE:
+              session_->cluster_meta().drop_table(response->keyspace().to_string(),
+                                                  response->table_or_type().to_string());
+              break;
+            case EventResponse::TYPE:
+              break;
           }
           break;
+
       }
       break;
 
@@ -539,7 +550,7 @@ void ControlConnection::on_refresh_node_info_all(ControlConnection* control_conn
 }
 
 void ControlConnection::update_node_info(SharedRefPtr<Host> host, const Row* row) {
-  const Value* v;
+  const OutputValue* v;
 
   std::string rack;
   row->get_string_by_name("rack", &rack);
@@ -551,7 +562,7 @@ void ControlConnection::update_node_info(SharedRefPtr<Host> host, const Row* row
   v = row->get_by_name("peer");
   if (v != NULL) {
     Address listen_address;
-    Address::from_inet(v->buffer().data(), v->buffer().size(),
+    Address::from_inet(v->data(), v->size(),
                        connection_->address().port(),
                        &listen_address);
     host->set_listen_address(listen_address.to_string());
@@ -578,8 +589,7 @@ void ControlConnection::update_node_info(SharedRefPtr<Host> host, const Row* row
       CollectionIterator i(v);
       TokenStringList tokens;
       while (i.next()) {
-        const BufferPiece& bp = i.value()->buffer();
-        tokens.push_back(StringRef(bp.data(), bp.size()));
+        tokens.push_back(i.value()->to_string_ref());
       }
       if (!tokens.empty()) {
         session_->cluster_meta().update_host(host, tokens);
@@ -648,6 +658,36 @@ void ControlConnection::on_refresh_table(ControlConnection* control_connection,
   Session* session = control_connection->session_;
   session->cluster_meta().update_tables(column_family_result,
                                         static_cast<ResultResponse*>(responses[1]));
+}
+
+
+void ControlConnection::refresh_type(const StringRef& keyspace_name,
+                                     const StringRef& type_name) {
+
+  std::string query(SELECT_USERTYPES);
+  query.append(" WHERE keyspace_name='").append(keyspace_name.data(), keyspace_name.size())
+                .append("' AND type_name='").append(type_name.data(), type_name.size()).append("'");
+
+  LOG_DEBUG("Refreshing type %s", query.c_str());
+
+  connection_->write(
+        new ControlHandler<std::pair<std::string, std::string> >(new QueryRequest(query),
+                                        this,
+                                        ControlConnection::on_refresh_type,
+                                        std::make_pair(keyspace_name.to_string(), type_name.to_string())));
+}
+
+void ControlConnection::on_refresh_type(ControlConnection* control_connection,
+                                        const std::pair<std::string, std::string>& keyspace_and_type_names,
+                                        Response* response) {
+  ResultResponse* result = static_cast<ResultResponse*>(response);
+  if (result->row_count() == 0) {
+    LOG_ERROR("No row found for keyspace %s and type %s in system schema table.",
+              keyspace_and_type_names.first.c_str(),
+              keyspace_and_type_names.first.c_str());
+    return;
+  }
+  control_connection->session_->cluster_meta().update_usertypes(result);
 }
 
 bool ControlConnection::handle_query_invalid_response(Response* response) {

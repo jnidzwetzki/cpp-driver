@@ -14,44 +14,47 @@
   limitations under the License.
 */
 
-#ifndef __CASS_VALUE_HPP_INCLUDED__
-#define __CASS_VALUE_HPP_INCLUDED__
+#ifndef __CASS_OUTPUT_VALUE_HPP_INCLUDED__
+#define __CASS_OUTPUT_VALUE_HPP_INCLUDED__
 
 #include "cassandra.h"
-#include "buffer_piece.hpp"
 #include "result_metadata.hpp"
+#include "string_ref.hpp"
 
 namespace cass {
 
-class Value {
+class OutputValue {
 public:
-  Value()
+  OutputValue()
       : type_(CASS_VALUE_TYPE_UNKNOWN)
       , primary_type_(CASS_VALUE_TYPE_UNKNOWN)
       , secondary_type_(CASS_VALUE_TYPE_UNKNOWN)
       , count_(0) {}
 
-  Value(CassValueType type, char* data, size_t size)
+  OutputValue(CassValueType type, char* data, size_t size)
       : type_(type)
       , primary_type_(CASS_VALUE_TYPE_UNKNOWN)
       , secondary_type_(CASS_VALUE_TYPE_UNKNOWN)
       , count_(0)
-      , buffer_(data, size) {}
+      , data_(data)
+      , size_(size) {}
 
-  Value(CassValueType type, CassValueType primary_type, CassValueType secondary_type,
+  OutputValue(CassValueType type, CassValueType primary_type, CassValueType secondary_type,
         int32_t count, char* data, size_t size)
       : type_(type)
       , primary_type_(primary_type)
       , secondary_type_(secondary_type)
       , count_(count)
-      , buffer_(data, size) {}
+      , data_(data)
+      , size_(size) {}
 
-  Value(const ColumnDefinition* def, int32_t count, char* data, size_t size)
+  OutputValue(const ColumnDefinition* def, int32_t count, char* data, size_t size)
     : type_(static_cast<CassValueType>(def->type))
     , primary_type_(static_cast<CassValueType>(def->collection_primary_type))
     , secondary_type_(static_cast<CassValueType>(def->collection_secondary_type))
     , count_(count)
-    , buffer_(data, size) {}
+    , data_(data)
+    , size_(size) {}
 
   CassValueType type() const { return type_; }
 
@@ -64,7 +67,7 @@ public:
   }
 
   bool is_null() const {
-    return buffer().size() < 0;
+    return size_ < 0;
   }
 
   bool is_collection() const { return is_collection(type_); }
@@ -74,8 +77,16 @@ public:
     return count_;
   }
 
-  const BufferPiece& buffer() const {
-    return buffer_;
+  char* data() const { return data_; }
+  int32_t size() const { return size_; }
+
+  StringRef to_string_ref() const {
+    if (size_ < 0) return StringRef();
+    return StringRef(data_, size_);
+  }
+
+  std::string to_string() const {
+    return to_string_ref().to_string();
   }
 
 private:
@@ -83,10 +94,12 @@ private:
   CassValueType primary_type_;
   CassValueType secondary_type_;
   int32_t count_;
-  BufferPiece buffer_;
+
+  char* data_;
+  int32_t size_;
 };
 
-typedef std::vector<Value> ValueVec;
+typedef std::vector<OutputValue> OutputValueVec;
 
 } // namespace cass
 

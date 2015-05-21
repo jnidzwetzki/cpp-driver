@@ -30,7 +30,7 @@ char* CollectionIterator::decode_value(char* position) {
     type = collection_->primary_type();
   }
 
-  value_ = Value(type, buffer, size);
+  value_ = OutputValue(type, buffer, size);
 
   return buffer + size;
 }

@@ -14,7 +14,7 @@
   limitations under the License.
 */
 
-#include "value.hpp"
+#include "output_value.hpp"
 
 #include "types.hpp"
 
@@ -25,7 +25,7 @@ CassError cass_value_get_int32(const CassValue* value, cass_int32_t* output) {
   if (value->type() != CASS_VALUE_TYPE_INT) {
     return CASS_ERROR_LIB_INVALID_VALUE_TYPE;
   }
-  cass::decode_int32(value->buffer().data(), *output);
+  cass::decode_int32(value->data(), *output);
   return CASS_OK;
 }
 
@@ -36,7 +36,7 @@ CassError cass_value_get_int64(const CassValue* value, cass_int64_t* output) {
       value->type() != CASS_VALUE_TYPE_TIMESTAMP) {
     return CASS_ERROR_LIB_INVALID_VALUE_TYPE;
   }
-  cass::decode_int64(value->buffer().data(), *output);
+  cass::decode_int64(value->data(), *output);
   return CASS_OK;
 }
 
@@ -45,7 +45,7 @@ CassError cass_value_get_float(const CassValue* value, cass_float_t* output) {
   if (value->type() != CASS_VALUE_TYPE_FLOAT) {
     return CASS_ERROR_LIB_INVALID_VALUE_TYPE;
   }
-  cass::decode_float(value->buffer().data(), *output);
+  cass::decode_float(value->data(), *output);
   return CASS_OK;
 }
 
@@ -54,7 +54,7 @@ CassError cass_value_get_double(const CassValue* value, cass_double_t* output) {
   if (value->type() != CASS_VALUE_TYPE_DOUBLE) {
     return CASS_ERROR_LIB_INVALID_VALUE_TYPE;
   }
-  cass::decode_double(value->buffer().data(), *output);
+  cass::decode_double(value->data(), *output);
   return CASS_OK;
 }
 
@@ -64,7 +64,7 @@ CassError cass_value_get_bool(const CassValue* value, cass_bool_t* output) {
   if (value->type() != CASS_VALUE_TYPE_BOOLEAN) {
     return CASS_ERROR_LIB_INVALID_VALUE_TYPE;
   }
-  cass::decode_byte(value->buffer().data(), byte);
+  cass::decode_byte(value->data(), byte);
   *output = static_cast<cass_bool_t>(byte);
   return CASS_OK;
 }
@@ -75,7 +75,7 @@ CassError cass_value_get_uuid(const CassValue* value, CassUuid* output) {
       value->type() != CASS_VALUE_TYPE_TIMEUUID) {
     return CASS_ERROR_LIB_INVALID_VALUE_TYPE;
   }
-  cass::decode_uuid(value->buffer().data(), output);
+  cass::decode_uuid(value->data(), output);
   return CASS_OK;
 }
 
@@ -84,8 +84,8 @@ CassError cass_value_get_inet(const CassValue* value, CassInet* output) {
   if (value->type() != CASS_VALUE_TYPE_INET) {
     return CASS_ERROR_LIB_INVALID_VALUE_TYPE;
   }
-  output->address_length = value->buffer().size();
-  memcpy(output->address, value->buffer().data(), value->buffer().size());
+  output->address_length = value->size();
+  memcpy(output->address, value->data(), value->size());
   return CASS_OK;
 }
 
@@ -93,8 +93,8 @@ CassError cass_value_get_string(const CassValue* value,
                                 const char** output,
                                 size_t* output_length) {
   if (value == NULL || value->is_null()) return CASS_ERROR_LIB_NULL_VALUE;
-  *output = value->buffer().data();
-  *output_length = value->buffer().size();
+  *output = value->data();
+  *output_length = value->size();
   return CASS_OK;
 }
 
@@ -102,8 +102,8 @@ CassError cass_value_get_bytes(const CassValue* value,
                                const cass_byte_t** output,
                                size_t* output_size) {
   if (value == NULL || value->is_null()) return CASS_ERROR_LIB_NULL_VALUE;
-  *output = reinterpret_cast<cass_byte_t*>(value->buffer().data());
-  *output_size = value->buffer().size();
+  *output = reinterpret_cast<cass_byte_t*>(value->data());
+  *output_size = value->size();
   return CASS_OK;
 }
 
@@ -115,9 +115,9 @@ CassError cass_value_get_decimal(const CassValue* value,
   if (value->type() != CASS_VALUE_TYPE_DECIMAL) {
     return CASS_ERROR_LIB_INVALID_VALUE_TYPE;
   }
-  const char* buffer = cass::decode_int32(value->buffer().data(), *scale);
+  const char* buffer = cass::decode_int32(value->data(), *scale);
   *varint = reinterpret_cast<const cass_byte_t*>(buffer);
-  *varint_size = value->buffer().size() - sizeof(int32_t);
+  *varint_size = value->size() - sizeof(int32_t);
   return CASS_OK;
 }
 
@@ -149,7 +149,7 @@ CassValueType cass_value_secondary_sub_type(const CassValue* collection) {
 
 namespace cass {
 
-bool Value::is_collection(CassValueType t) {
+bool OutputValue::is_collection(CassValueType t) {
   switch (t) {
     case CASS_VALUE_TYPE_LIST:
     case CASS_VALUE_TYPE_MAP:
