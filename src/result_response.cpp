@@ -47,7 +47,7 @@ CassError cass_result_column_name(const CassResult* result,
                                   size_t* name_length) {
   if (result->kind() == CASS_RESULT_KIND_ROWS &&
       index < result->metadata()->column_count()) {
-    const cass::ColumnDefinition def = result->metadata()->get(index);
+    const cass::ColumnDefinition def = result->metadata()->get_indexes(index);
     *name = def.name;
     *name_length = def.name_size;
     return CASS_OK;
@@ -58,7 +58,7 @@ CassError cass_result_column_name(const CassResult* result,
 CassValueType cass_result_column_type(const CassResult* result, size_t index) {
   if (result->kind() == CASS_RESULT_KIND_ROWS &&
       index < result->metadata()->column_count()) {
-    return static_cast<CassValueType>(result->metadata()->get(index).type);
+    return static_cast<CassValueType>(result->metadata()->get_indexes(index).type);
   }
   return CASS_VALUE_TYPE_UNKNOWN;
 }
@@ -79,8 +79,8 @@ cass_bool_t cass_result_has_more_pages(const CassResult* result) {
 namespace cass {
 
 size_t ResultResponse::find_column_indices(StringRef name,
-                                           ResultMetadata::IndexVec* result) const {
-  return metadata_->get(name, result);
+                                           HashIndex::IndexVec* result) const {
+  return metadata_->get_indexes(name, result);
 }
 
 bool ResultResponse::decode(int version, char* input, size_t size) {
@@ -147,7 +147,7 @@ char* ResultResponse::decode_metadata(char* input, ScopedRefPtr<ResultMetadata>*
         buffer = decode_string(buffer, &def.table, def.table_size);
       }
 
-      buffer = decode_string(buffer, &def.name, def.name_size);
+      buffer = decode_const_string(buffer, &def.name, def.name_size);
       buffer = decode_option(buffer, def.type, &def.class_name,
                              def.class_name_size);
 

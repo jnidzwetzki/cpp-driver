@@ -92,7 +92,7 @@ public:
   const Row& first_row() const { return first_row_; }
 
   size_t find_column_indices(StringRef name,
-                             ResultMetadata::IndexVec* result) const;
+                             HashIndex::IndexVec* result) const;
 
   bool decode(int version, char* input, size_t size);
 

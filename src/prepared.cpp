@@ -43,7 +43,7 @@ Prepared::Prepared(const ResultResponse* result,
       : result_(result)
       , id_(result->prepared())
       , statement_(statement) {
-    ResultMetadata::IndexVec indices;
+    HashIndex::IndexVec indices;
     // If the statement has bound parameters find the key indices
     if (result->column_count() > 0) {
       for (std::vector<std::string>::const_iterator i = key_columns.begin();

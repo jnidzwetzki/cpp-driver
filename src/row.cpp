@@ -55,7 +55,7 @@ char* decode_row(char* rows, const ResultResponse* result, OutputValueVec& outpu
     int32_t size = 0;
     buffer = decode_int32(buffer, size);
 
-    const ColumnDefinition& def = result->metadata()->get(i);
+    const ColumnDefinition& def = result->metadata()->get_indexes(i);
     CassValueType type = static_cast<CassValueType>(def.type);
 
     if (size >= 0) {
@@ -76,7 +76,7 @@ char* decode_row(char* rows, const ResultResponse* result, OutputValueVec& outpu
 }
 
 const OutputValue* Row::get_by_name(const StringRef& name) const {
-  cass::ResultMetadata::IndexVec indices;
+  cass::HashIndex::IndexVec indices;
   if (result_->find_column_indices(name, &indices) == 0) {
     return NULL;
   }

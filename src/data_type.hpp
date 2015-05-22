@@ -18,6 +18,7 @@
 #define __CASS_DATA_TYPE_HPP_INCLUDED__
 
 #include "cassandra.h"
+#include "hash_index.hpp"
 #include "ref_counted.hpp"
 
 #include <map>
@@ -91,12 +92,16 @@ private:
 
 class UserType : public DataType {
 public:
-  struct Field {
-    Field(const std::string& name,
+  struct Field : public HashIndex::Entry {
+    Field(const std::string& field_name,
           SharedRefPtr<DataType> type)
-      : name(name)
-      , type(type) { }
-    std::string name;
+      : field_name(field_name)
+      , type(type) {
+      name = field_name.data();
+      name_size = field_name.size();
+    }
+
+    std::string field_name;
     SharedRefPtr<DataType> type;
   };
 
@@ -108,16 +113,28 @@ public:
     : DataType(CASS_VALUE_TYPE_UDT)
     , keyspace_(keyspace)
     , type_name_(type_name)
-    , fields_(fields) { }
+    , fields_(fields)
+    , index_(fields.size()) {
+    for (size_t i = 0; i < fields_.size(); ++i) {
+      Field* field = &fields_[i];
+      field->index = i;
+      index_.insert(field);
+    }
+  }
 
   const std::string& keyspace() const { return keyspace_; }
   const std::string& type_name() const { return type_name_; }
   const FieldVec& fields() const { return fields_; }
 
+  size_t get_indexes(StringRef name, HashIndex::IndexVec* result) const {
+    return index_.get(name, result);
+  }
+
 private:
   std::string keyspace_;
   std::string type_name_;
   FieldVec fields_;
+  HashIndex index_;
 };
 
 class TupleType : public DataType {

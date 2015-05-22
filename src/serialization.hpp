@@ -147,6 +147,15 @@ inline char* decode_string(char* input, char** output, size_t& size) {
   return pos + string_size;
 }
 
+// TODO: Make all decode functions work with const
+inline char* decode_const_string(char* input, const char** output, size_t &size) {
+  char* temp;
+ char* pos =  decode_string(input, &temp, size);
+  *output = temp;
+ return pos;
+}
+
+
 inline char* decode_string_ref(char* buffer, StringRef* output) {
   char* str;
   size_t str_size;

@@ -141,7 +141,7 @@ namespace cass {
     const cass::ResultResponse* result
         = static_cast<cass::ExecuteRequest*>(statement)->prepared()->result().get();
 
-    cass::ResultMetadata::IndexVec indices;
+    cass::HashIndex::IndexVec indices;
     result->find_column_indices(name, &indices);
     IsValidValueType<T> is_valid_type;
 
@@ -149,10 +149,10 @@ namespace cass {
       return CASS_ERROR_LIB_NAME_DOES_NOT_EXIST;
     }
 
-    for (cass::ResultMetadata::IndexVec::const_iterator it = indices.begin(),
+    for (cass::HashIndex::IndexVec::const_iterator it = indices.begin(),
          end = indices.end(); it != end; ++it) {
       size_t index = *it;
-      if (!is_valid_type(result->metadata()->get(index).type)) {
+      if (!is_valid_type(result->metadata()->get_indexes(index).type)) {
         return CASS_ERROR_LIB_INVALID_VALUE_TYPE;
       }
       statement->bind(index, value);
