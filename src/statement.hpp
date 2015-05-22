@@ -116,7 +116,7 @@ public:
 
   CassError bind(size_t index, const CollectionInputValue* collection) {
     CASS_VALUE_CHECK_INDEX(index);
-    if (collection->collection_type() == CASS_COLLECTION_TYPE_MAP &&
+    if (collection->type() == CASS_COLLECTION_TYPE_MAP &&
         collection->items().size() % 2 != 0) {
       return CASS_ERROR_LIB_INVALID_ITEM_COUNT;
     }

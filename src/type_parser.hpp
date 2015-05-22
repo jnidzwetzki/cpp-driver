@@ -18,32 +18,15 @@
 #define __CASS_TYPE_PARSER_HPP_INCLUDED__
 
 #include "cassandra.h"
+#include "data_type.hpp"
 #include "output_value.hpp"
 #include "ref_counted.hpp"
 
-#include <list>
 #include <map>
 #include <string>
-#include <sstream>
+#include <vector>
 
 namespace cass {
-
-class DataType : public RefCounted<DataType> {
-public:
-  DataType(CassValueType type)
-    : type_(type) { }
-
-  virtual ~DataType() { }
-
-  CassValueType type() const { return type_; }
-
-  virtual bool is_frozen() const { return false; }
-
-private:
-  CassValueType type_;
-};
-
-typedef std::vector<SharedRefPtr<DataType> > DataTypeVec;
 
 class ParseResult : public RefCounted<ParseResult> {
 public:
@@ -75,95 +58,6 @@ private:
   DataTypeVec types_;
   ReversedVec reversed_;
   CollectionMap collections_;
-};
-
-class CollectionType : public DataType {
-public:
-  CollectionType(CassValueType type, const DataTypeVec& types, bool frozen)
-    : DataType(type)
-    , types_(types)
-    , frozen_(frozen) { }
-
-  virtual bool is_frozen() const { return frozen_; }
-  const DataTypeVec& types() const { return types_; }
-
-public:
-  static SharedRefPtr<DataType> list(SharedRefPtr<DataType> element_type, bool frozen) {
-    DataTypeVec types;
-    types.push_back(element_type);
-    return SharedRefPtr<DataType>(new CollectionType(CASS_VALUE_TYPE_LIST, types, frozen));
-  }
-
-  static SharedRefPtr<DataType> set(SharedRefPtr<DataType> element_type, bool frozen) {
-    DataTypeVec types;
-    types.push_back(element_type);
-    return SharedRefPtr<DataType>(new CollectionType(CASS_VALUE_TYPE_SET, types, frozen));
-  }
-
-  static SharedRefPtr<DataType> map(SharedRefPtr<DataType> key_type, SharedRefPtr<DataType> value_type, bool frozen) {
-    DataTypeVec types;
-    types.push_back(key_type);
-    types.push_back(value_type);
-    return SharedRefPtr<DataType>(new CollectionType(CASS_VALUE_TYPE_MAP, types, frozen));
-  }
-
-private:
-  DataTypeVec types_;
-  bool frozen_;
-};
-
-class CustomType : public DataType {
-public:
-  CustomType(const std::string& class_name)
-    : DataType(CASS_VALUE_TYPE_CUSTOM)
-    , class_name_(class_name) { }
-
-  const std::string& class_name() const { return class_name_; }
-private:
-  std::string class_name_;
-};
-
-class UserType : public DataType {
-public:
-  struct Field {
-    Field(const std::string& name,
-          SharedRefPtr<DataType> type)
-      : name(name)
-      , type(type) { }
-    std::string name;
-    SharedRefPtr<DataType> type;
-  };
-
-  typedef std::vector<Field> FieldVec;
-
-  UserType(const std::string& keyspace,
-           const std::string& type_name,
-           const FieldVec& fields)
-    : DataType(CASS_VALUE_TYPE_UDT)
-    , keyspace_(keyspace)
-    , type_name_(type_name)
-    , fields_(fields) { }
-
-  const std::string& keyspace() const { return keyspace_; }
-  const std::string& type_name() const { return type_name_; }
-  const FieldVec& fields() const { return fields_; }
-
-private:
-  std::string keyspace_;
-  std::string type_name_;
-  FieldVec fields_;
-};
-
-class TupleType : public DataType {
-public:
-  TupleType(const DataTypeVec& types)
-    : DataType(CASS_VALUE_TYPE_TUPLE)
-    , types_(types) { }
-
-  const DataTypeVec& types() const { return types_; }
-
-private:
-  DataTypeVec types_;
 };
 
 class TypeParser {

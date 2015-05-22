@@ -84,7 +84,7 @@ size_t ResultMetadata::get(StringRef name,
     }
   } else {
     while (def != NULL) {
-      if (name.compare(StringRef(def->name, def->name_size)) == 0) {
+      if (name.equals(StringRef(def->name, def->name_size))) {
         result->push_back(def->index);
       }
       def = def->next;

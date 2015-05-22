@@ -197,7 +197,6 @@ size_t SimpleStrategy::get_replication_factor(const SchemaMetadataField* strateg
       }
     }
   }
-
   return 0;
 }
 

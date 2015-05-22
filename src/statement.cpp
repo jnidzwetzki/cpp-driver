@@ -539,8 +539,7 @@ bool Statement::get_routing_key(std::string* routing_key)  const {
       assert(key_indices_.front() < values_.size());
       const SharedRefPtr<const InputValue>& value = values_[key_indices_.front()];
       // TODO: Routing key check
-      if (value->type() != InputValue::SIMPLE &&
-          value->type() != InputValue::USER_TYPE) {
+      if (!value->is_routable()) {
         LOG_ERROR("Routing key cannot contain a collection or null value");
         return false;
       }
@@ -554,8 +553,7 @@ bool Statement::get_routing_key(std::string* routing_key)  const {
       assert(*i < values_.size());
       const SharedRefPtr<const InputValue>& value = values_[*i];
       // TODO: Routing key check
-      if (value->type() != InputValue::SIMPLE &&
-          value->type() != InputValue::USER_TYPE) {
+      if (!value->is_routable()) {
         LOG_ERROR("Routing key cannot contain a collection or null value");
         return false;
       }

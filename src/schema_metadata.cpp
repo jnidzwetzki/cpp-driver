@@ -363,7 +363,8 @@ void SchemaMetadata::add_json_list_field(int version, const Row* row, const std:
     collection.append(cass::CassString(i->GetString(), i->GetStringLength()));
   }
 
-  Buffer encoded = collection.encode();
+  Buffer encoded(collection.get_values_size());
+  collection.encode_values(0, &encoded);
 
   OutputValue map(CASS_VALUE_TYPE_LIST,
             CASS_VALUE_TYPE_TEXT,
@@ -407,7 +408,8 @@ void SchemaMetadata::add_json_map_field(int version, const Row* row, const std::
     collection.append(CassString(i->value.GetString(), i->value.GetStringLength()));
   }
 
-  Buffer encoded = collection.encode();
+  Buffer encoded(collection.get_values_size());
+  collection.encode_values(0, &encoded);
 
   OutputValue map(CASS_VALUE_TYPE_MAP,
             CASS_VALUE_TYPE_TEXT,

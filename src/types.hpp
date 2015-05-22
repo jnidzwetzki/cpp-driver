@@ -18,18 +18,19 @@
 #define __CASS_CASSANDRA_HPP_INCLUDED__
 
 #include "cassandra.h"
-#include "cluster.hpp"
-#include "schema_metadata.hpp"
-#include "session.hpp"
-#include "statement.hpp"
-#include "future.hpp"
-#include "prepared.hpp"
 #include "batch_request.hpp"
+#include "cluster.hpp"
+#include "future.hpp"
+#include "input_value.hpp"
+#include "iterator.hpp"
+#include "output_value.hpp"
+#include "prepared.hpp"
 #include "result_response.hpp"
 #include "row.hpp"
-#include "output_value.hpp"
-#include "iterator.hpp"
+#include "schema_metadata.hpp"
+#include "session.hpp"
 #include "ssl.hpp"
+#include "statement.hpp"
 #include "uuids.hpp"
 
 // This abstraction allows us to separate internal types from the
@@ -66,6 +67,7 @@ EXTERNAL_TYPE(cass::Schema, CassSchema);
 EXTERNAL_TYPE(cass::SchemaMetadata, CassSchemaMeta);
 EXTERNAL_TYPE(cass::SchemaMetadataField, CassSchemaMetaField);
 EXTERNAL_TYPE(cass::UuidGen, CassUuidGen);
+EXTERNAL_TYPE(cass::UserTypeInputValue, CassUserType);
 
 }
 
