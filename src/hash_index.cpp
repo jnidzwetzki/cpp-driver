@@ -89,7 +89,6 @@ size_t HashIndex::get(StringRef name, HashIndex::IndexVec* result) const {
 }
 
 void HashIndex::insert(HashIndex::Entry* entry) {
-
   size_t h = fnv1a_hash_lower(entry->name) & index_mask_;
 
   if (index_[h] == NULL) {

@@ -47,9 +47,8 @@ CassError bind_by_name(cass::Statement* statement,
   for (cass::HashIndex::IndexVec::const_iterator it = indices.begin(),
        end = indices.end(); it != end; ++it) {
     size_t index = *it;
-    CassError rc = validate_type(metadata, index, value);
+    CassError rc = statement->bind(index, value);
     if (rc != CASS_OK) return rc;
-    statement->bind(index, value);
   }
 
   return CASS_OK;

@@ -33,20 +33,6 @@
 
 namespace cass {
 
-template<class T>
-CassError validate_type(const SharedRefPtr<ResultMetadata>& metadata,
-                        size_t index,
-                        const T value) {
-  IsValidDataType<T> is_valid_type;
-  if (index >= metadata->column_count()) {
-    return CASS_ERROR_LIB_INDEX_OUT_OF_BOUNDS;
-  }
-  if(!is_valid_type(value, metadata->get_column_definition(index).data_type)) {
-      return CASS_ERROR_LIB_INVALID_VALUE_TYPE;
-  }
-  return CASS_OK;
-}
-
 class Statement : public RoutableRequest {
 public:
   Statement(uint8_t opcode, uint8_t kind, size_t value_count = 0)
@@ -58,13 +44,15 @@ public:
 
   Statement(uint8_t opcode, uint8_t kind, size_t value_count,
             const std::vector<size_t>& key_indices,
-            const std::string& keyspace)
+            const std::string& keyspace,
+            const SharedRefPtr<ResultMetadata> metadata)
       : RoutableRequest(opcode, keyspace)
       , values_(value_count)
       , skip_metadata_(false)
       , page_size_(-1)
       , kind_(kind)
-      , key_indices_(key_indices) {}
+      , key_indices_(key_indices)
+      , metadata_(metadata) {}
 
   virtual ~Statement() {}
 
@@ -90,22 +78,20 @@ public:
 
   virtual const std::string& query() const = 0;
 
-  const SharedRefPtr<ResultMetadata>& metadata() const {
-    return metadata_;
-  }
-
   size_t values_count() const { return values_.size(); }
+
+  const SharedRefPtr<ResultMetadata>& metadata() const { return metadata_; }
 
   void add_key_index(size_t index) { key_indices_.push_back(index); }
 
   virtual bool get_routing_key(std::string* routing_key) const;
 
 
-#define CHECK_INDEX_AND_TYPE(index, value) do { \
-  if (index >= values_count()) {                \
+#define CHECK_INDEX_AND_TYPE(Index, Value) do { \
+  if (Index >= values_count()) {                \
     return CASS_ERROR_LIB_INDEX_OUT_OF_BOUNDS;  \
   }                                             \
-  CassError rc = validate_type(index, value);   \
+  CassError rc = validate_type(Index, Value);   \
   if (rc != CASS_OK) return rc;                 \
 } while(0)
 
@@ -138,18 +124,19 @@ public:
     return CASS_OK;
   }
 
-  CassError bind(size_t index, const Collection* collection) {
-    CHECK_INDEX_AND_TYPE(index, collection);
-    if (collection->type() == CASS_COLLECTION_TYPE_MAP &&
-        collection->items().size() % 2 != 0) {
+  CassError bind(size_t index, const Collection* value) {
+    CHECK_INDEX_AND_TYPE(index, value);
+    if (value->type() == CASS_COLLECTION_TYPE_MAP &&
+        value->items().size() % 2 != 0) {
       return CASS_ERROR_LIB_INVALID_ITEM_COUNT;
     }
-    values_[index] = collection->encode_with_length();
+    values_[index] = value->encode_with_length();
     return CASS_OK;
   }
 
-  CassError bind(size_t index, const UserTypeValue* user_type) {
-    CHECK_INDEX_AND_TYPE(index, user_type);
+  CassError bind(size_t index, const UserTypeValue* value) {
+    CHECK_INDEX_AND_TYPE(index, value);
+    values_[index] = value->encode_with_length();
     return CASS_OK;
   }
 
@@ -157,17 +144,17 @@ public:
 
   int32_t encode_values(BufferVec*  bufs) const;
 
-protected:
-  SharedRefPtr<ResultMetadata> metadata_;
-
 private:
   template <class T>
   CassError validate_type(size_t index, const T value) const {
-    // This can only validate statements with prepared data
+    // This can only validate statements with metadata
     if (!metadata_) {
       return CASS_OK;
     }
-    return cass::validate_type(metadata_, index, value);
+    IsValidDataType<T> is_valid_type;
+    if(!is_valid_type(value, metadata_->get_column_definition(index).data_type)) {
+      return CASS_ERROR_LIB_INVALID_VALUE_TYPE;
+    }
     return CASS_OK;
   }
 
@@ -180,6 +167,7 @@ private:
   std::string paging_state_;
   uint8_t kind_;
   std::vector<size_t> key_indices_;
+  SharedRefPtr<ResultMetadata> metadata_;
 
 private:
   DISALLOW_COPY_AND_ASSIGN(Statement);

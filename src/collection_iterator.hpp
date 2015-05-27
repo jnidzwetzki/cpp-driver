@@ -37,7 +37,7 @@ public:
 
   virtual bool next();
 
-  const Value* value() {
+  const Value* value() const {
     assert(index_ >= 0 && index_ < count_);
     return &value_;
   }
@@ -47,10 +47,12 @@ private:
 
 private:
   const Value* collection_;
+
   char* position_;
-  Value value_;
   int32_t index_;
   const int32_t count_;
+
+  Value value_;
 };
 
 } // namespace cass

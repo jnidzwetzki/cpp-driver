@@ -17,10 +17,11 @@
 #include "iterator.hpp"
 
 #include "collection_iterator.hpp"
+#include "external_types.hpp"
 #include "map_iterator.hpp"
 #include "result_iterator.hpp"
 #include "row_iterator.hpp"
-#include "external_types.hpp"
+#include "user_type_iterator.hpp"
 
 extern "C" {
 
@@ -44,11 +45,42 @@ CassIterator* cass_iterator_from_collection(const CassValue* value) {
 }
 
 CassIterator* cass_iterator_from_map(const CassValue* value) {
-  if (value->value_type() != CASS_VALUE_TYPE_MAP) {
+  if (value->is_map()) {
     return NULL;
   }
   return CassIterator::to(new cass::MapIterator(value));
 }
+
+CassIterator* cass_iterator_from_user_type(const CassValue* value) {
+  if (!value->is_user_type()) {
+    return NULL;
+  }
+  return CassIterator::to(new cass::UserTypeIterator(value));
+}
+
+CassError cass_iterator_get_field_name(CassIterator* iterator,
+                                       const char** name,
+                                       size_t* name_length) {
+  if (iterator->type() != CASS_ITERATOR_TYPE_USER_TYPE) {
+    return CASS_ERROR_LIB_BAD_PARAMS;
+  }
+  cass::StringRef field_name
+      = static_cast<cass::UserTypeIterator*>(
+          iterator->from())->field_name();
+  *name = field_name.data();
+  *name_length = field_name.size();
+  return CASS_OK;
+}
+
+const CassValue* cass_iterator_get_field_value(CassIterator* iterator) {
+  if (iterator->type() != CASS_ITERATOR_TYPE_USER_TYPE) {
+    return NULL;
+  }
+  return CassValue::to(
+        static_cast<cass::UserTypeIterator*>(
+          iterator->from())->field_value());
+}
+
 
 void cass_iterator_free(CassIterator* iterator) {
   delete iterator->from();

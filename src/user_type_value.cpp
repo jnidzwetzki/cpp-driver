@@ -24,11 +24,11 @@
 namespace cass {
 
 template<class T>
-CassError bind_by_name(cass::UserTypeValue* user_type,
+CassError bind_by_name(cass::UserTypeValue* user_type_value,
                        StringRef name,
                        T value) {
   cass::HashIndex::IndexVec indices;
-  user_type->get_item_indices(name, &indices);
+  user_type_value->user_type()->get_indices(name, &indices);
 
   if (indices.empty()) {
     return CASS_ERROR_LIB_NAME_DOES_NOT_EXIST;
@@ -37,10 +37,8 @@ CassError bind_by_name(cass::UserTypeValue* user_type,
   for (cass::HashIndex::IndexVec::const_iterator it = indices.begin(),
        end = indices.end(); it != end; ++it) {
     size_t index = *it;
-    CassError rc = user_type->set(index, value);
-    if (rc != CASS_OK) {
-      return rc;
-    }
+    CassError rc = user_type_value->set(index, value);
+    if (rc != CASS_OK) return rc;
   }
 
   return CASS_OK;
@@ -71,7 +69,6 @@ CassUserType* cass_user_type_new_n(CassSession* session,
 }
 
 
-#if 0
 #define CASS_USER_TYPE_SET(Name, Params, Value) \
   CassError cass_user_type_set_##Name(CassUserType* user_type,\
                                       size_t index Params) { \
@@ -135,7 +132,6 @@ CassError cass_user_type_set_string_by_name_n(CassUserType* user_type,
                             cass::StringRef(name, name_length),
                             cass::CassString(value, value_length));
 }
-#endif
 
 void cass_user_type_free(CassUserType* user_type) {
   delete user_type->from();

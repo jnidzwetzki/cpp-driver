@@ -19,6 +19,7 @@
 
 #include "cassandra.h"
 #include "hash_index.hpp"
+#include "macros.hpp"
 #include "ref_counted.hpp"
 #include "types.hpp"
 
@@ -50,6 +51,10 @@ public:
     return value_type_ == CASS_VALUE_TYPE_MAP;
   }
 
+  bool is_user_type() const {
+    return value_type_ == CASS_VALUE_TYPE_UDT;
+  }
+
   virtual bool is_frozen() const { return false; }
   virtual bool equals(const SharedRefPtr<DataType>& data_type) const {
     return value_type_ == data_type->value_type_;
@@ -57,6 +62,9 @@ public:
 
 private:
   CassValueType value_type_;
+
+private:
+ DISALLOW_COPY_AND_ASSIGN(DataType);
 };
 
 typedef std::vector<SharedRefPtr<DataType> > DataTypeVec;
@@ -137,9 +145,7 @@ public:
     Field(const std::string& field_name,
           SharedRefPtr<DataType> type)
       : field_name(field_name)
-      , type(type) {
-      name = StringRef(this->field_name);
-    }
+      , type(type) { }
 
     std::string field_name;
     SharedRefPtr<DataType> type;
@@ -158,6 +164,7 @@ public:
     for (size_t i = 0; i < fields_.size(); ++i) {
       Field* field = &fields_[i];
       field->index = i;
+      field->name = StringRef(field->field_name);
       index_.insert(field);
     }
   }

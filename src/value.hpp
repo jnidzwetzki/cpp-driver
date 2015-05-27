@@ -98,10 +98,18 @@ public:
   }
 
   bool is_collection() const {
-    if (!data_type_)  {
-      return false;
-    }
+    if (!data_type_)  return false;
     return data_type_->is_collection();
+  }
+
+  bool is_map() const {
+    if (!data_type_)  return false;
+    return data_type_->is_map();
+  }
+
+  bool is_user_type() const {
+    if (!data_type_)  return false;
+    return data_type_->is_user_type();
   }
 
   int32_t count() const {

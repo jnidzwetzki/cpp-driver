@@ -418,7 +418,8 @@ typedef enum CassIteratorType_ {
   CASS_ITERATOR_TYPE_COLLECTION,
   CASS_ITERATOR_TYPE_MAP,
   CASS_ITERATOR_TYPE_SCHEMA_META,
-  CASS_ITERATOR_TYPE_SCHEMA_META_FIELD
+  CASS_ITERATOR_TYPE_SCHEMA_META_FIELD,
+  CASS_ITERATOR_TYPE_USER_TYPE
 } CassIteratorType;
 
 typedef enum CassSchemaMetaType_ {
@@ -3393,6 +3394,9 @@ cass_iterator_from_collection(const CassValue* value);
 CASS_EXPORT CassIterator*
 cass_iterator_from_map(const CassValue* value);
 
+CASS_EXPORT CassIterator*
+cass_iterator_from_user_type(const CassValue* value);
+
 /**
  * Creates a new iterator for the specified schema.
  * This can be used to iterate over keyspace entries.
@@ -3533,6 +3537,14 @@ cass_iterator_get_map_key(CassIterator* iterator);
  */
 CASS_EXPORT const CassValue*
 cass_iterator_get_map_value(CassIterator* iterator);
+
+CASS_EXPORT CassError
+cass_iterator_get_field_name(CassIterator* iterator,
+                             const char** name,
+                             size_t* name_length);
+
+CASS_EXPORT const CassValue*
+cass_iterator_get_field_value(CassIterator* iterator);
 
 /**
  * Gets the schema metadata entry at the iterator's current

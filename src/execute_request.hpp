@@ -33,14 +33,14 @@ public:
       : Statement(CQL_OPCODE_EXECUTE, CASS_BATCH_KIND_PREPARED,
                   prepared->result()->column_count(),
                   prepared->key_indices(),
-                  prepared->result()->keyspace())
+                  prepared->result()->keyspace(),
+                  prepared->result()->metadata())
       , prepared_(prepared) {
       // If the prepared statement has result metadata then there is no
       // need to get the metadata with this request too.
       if (prepared->result()->result_metadata()) {
         set_skip_metadata(true);
       }
-      metadata_ = prepared->result()->metadata();
   }
 
   const std::string& query() const { return prepared_->id(); }
