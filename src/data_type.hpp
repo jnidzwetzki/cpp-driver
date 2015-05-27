@@ -20,6 +20,7 @@
 #include "cassandra.h"
 #include "hash_index.hpp"
 #include "ref_counted.hpp"
+#include "types.hpp"
 
 #include <map>
 #include <string>
@@ -27,32 +28,72 @@
 
 namespace cass {
 
+class Collection;
+class UserTypeValue;
+
 class DataType : public RefCounted<DataType> {
 public:
-  DataType(CassValueType type)
-    : type_(type) { }
+  DataType(CassValueType value_type)
+    : value_type_(value_type) { }
 
   virtual ~DataType() { }
 
-  CassValueType type() const { return type_; }
+  CassValueType value_type() const { return value_type_; }
+
+  bool is_collection() const  {
+    return value_type_ == CASS_VALUE_TYPE_LIST ||
+        value_type_ == CASS_VALUE_TYPE_MAP ||
+        value_type_ == CASS_VALUE_TYPE_SET;
+  }
+
+  bool is_map() const  {
+    return value_type_ == CASS_VALUE_TYPE_MAP;
+  }
 
   virtual bool is_frozen() const { return false; }
+  virtual bool equals(const SharedRefPtr<DataType>& data_type) const {
+    return value_type_ == data_type->value_type_;
+  }
 
 private:
-  CassValueType type_;
+  CassValueType value_type_;
 };
 
 typedef std::vector<SharedRefPtr<DataType> > DataTypeVec;
 
 class CollectionType : public DataType {
 public:
-  CollectionType(CassValueType type, const DataTypeVec& types, bool frozen)
-    : DataType(type)
+  CollectionType(CassValueType collection_type, const DataTypeVec& types, bool frozen)
+    : DataType(collection_type)
     , types_(types)
     , frozen_(frozen) { }
 
+  CollectionType(CassValueType primary_type,
+                 CassValueType secondary_type)
+    : DataType(CASS_VALUE_TYPE_MAP) {
+    types_.push_back(SharedRefPtr<DataType>(new DataType(primary_type)));
+    types_.push_back(SharedRefPtr<DataType>(new DataType(secondary_type)));
+    frozen_ = false;
+  }
+
   virtual bool is_frozen() const { return frozen_; }
   const DataTypeVec& types() const { return types_; }
+
+  virtual bool equals(const SharedRefPtr<DataType>& data_type) const {
+    assert(value_type() == CASS_VALUE_TYPE_LIST ||
+           value_type() == CASS_VALUE_TYPE_SET ||
+           value_type() == CASS_VALUE_TYPE_MAP);
+    if (value_type() == data_type->value_type()) {
+      const SharedRefPtr<CollectionType>& collection_type(data_type);
+      assert(types_.size() == collection_type->types_.size());
+      for (size_t i = 0; i < types_.size(); ++i) {
+        if(!types_[i]->equals(collection_type->types_[i])) {
+          return false;
+        }
+      }
+    }
+    return false;
+  }
 
 public:
   static SharedRefPtr<DataType> list(SharedRefPtr<DataType> element_type, bool frozen) {
@@ -97,8 +138,7 @@ public:
           SharedRefPtr<DataType> type)
       : field_name(field_name)
       , type(type) {
-      name = field_name.data();
-      name_size = field_name.size();
+      name = StringRef(this->field_name);
     }
 
     std::string field_name;
@@ -126,8 +166,25 @@ public:
   const std::string& type_name() const { return type_name_; }
   const FieldVec& fields() const { return fields_; }
 
-  size_t get_indexes(StringRef name, HashIndex::IndexVec* result) const {
+  size_t get_indices(StringRef name, HashIndex::IndexVec* result) const {
     return index_.get(name, result);
+  }
+
+  virtual bool equals(const SharedRefPtr<DataType>& data_type) const {
+    assert(value_type() == CASS_VALUE_TYPE_UDT);
+    if (data_type->value_type() == CASS_VALUE_TYPE_UDT) {
+      const SharedRefPtr<UserType>& user_type(data_type);
+      if (fields_.size() != user_type->fields_.size()) {
+        return false;
+      }
+      for (size_t i = 0; i < fields_.size(); ++i) {
+        if (fields_[i].name != user_type->fields_[i].name ||
+            !fields_[i].type->equals(user_type->fields_[i].type)) {
+          return false;
+        }
+      }
+    }
+    return false;
   }
 
 private:
@@ -145,8 +202,129 @@ public:
 
   const DataTypeVec& types() const { return types_; }
 
+  virtual bool equals(const SharedRefPtr<DataType>& data_type) const {
+    assert(value_type() == CASS_VALUE_TYPE_TUPLE);
+    if (value_type() == data_type->value_type()) {
+      const SharedRefPtr<TupleType>& tuple_type(data_type);
+      if (types_.size() != tuple_type->types_.size()) {
+        return false;
+      }
+      for (size_t i = 0; i < types_.size(); ++i) {
+        if(!types_[i]->equals(tuple_type->types_[i])) {
+          return false;
+        }
+      }
+    }
+    return false;
+  }
+
 private:
   DataTypeVec types_;
+};
+
+template<class T>
+struct IsValidDataType;
+
+template<>
+struct IsValidDataType<CassNull> {
+  bool operator()(CassNull, const SharedRefPtr<DataType>& data_type) const {
+    return true;
+  }
+};
+
+template<>
+struct IsValidDataType<cass_int32_t> {
+  bool operator()(cass_int32_t, const SharedRefPtr<DataType>& data_type) const {
+    return data_type->value_type() == CASS_VALUE_TYPE_INT;
+  }
+};
+
+template<>
+struct IsValidDataType<cass_int64_t> {
+  bool operator()(cass_int64_t, const SharedRefPtr<DataType>& data_type) const {
+    int value_type = data_type->value_type();
+    return value_type == CASS_VALUE_TYPE_BIGINT ||
+        value_type == CASS_VALUE_TYPE_COUNTER ||
+        value_type == CASS_VALUE_TYPE_TIMESTAMP;
+  }
+};
+
+template<>
+struct IsValidDataType<cass_float_t> {
+  bool operator()(cass_float_t, const SharedRefPtr<DataType>& data_type) const {
+    return data_type->value_type() == CASS_VALUE_TYPE_FLOAT;
+  }
+};
+
+template<>
+struct IsValidDataType<cass_double_t> {
+  bool operator()(cass_double_t, const SharedRefPtr<DataType>& data_type) const {
+    return data_type->value_type() == CASS_VALUE_TYPE_DOUBLE;
+  }
+};
+
+template<>
+struct IsValidDataType<bool> {
+  bool operator()(bool, const SharedRefPtr<DataType>& data_type) const {
+    return data_type->value_type() == CASS_VALUE_TYPE_BOOLEAN;
+  }
+};
+
+template<>
+struct IsValidDataType<CassString> {
+  bool operator()(CassString, const SharedRefPtr<DataType>& data_type) const {
+    int value_type = data_type->value_type();
+    return value_type == CASS_VALUE_TYPE_ASCII ||
+        value_type == CASS_VALUE_TYPE_TEXT ||
+        value_type == CASS_VALUE_TYPE_VARCHAR;
+  }
+};
+
+template<>
+struct IsValidDataType<CassBytes> {
+  bool operator()(CassBytes, const SharedRefPtr<DataType>& data_type) const {
+    return data_type->value_type() == CASS_VALUE_TYPE_BLOB;
+  }
+};
+
+template<>
+struct IsValidDataType<CassUuid> {
+  bool operator()(CassUuid, const SharedRefPtr<DataType>& data_type) const {
+    int value_type = data_type->value_type();
+    return value_type == CASS_VALUE_TYPE_TIMEUUID ||
+        value_type == CASS_VALUE_TYPE_UUID;
+  }
+};
+
+template<>
+struct IsValidDataType<CassInet> {
+  bool operator()(CassInet, const SharedRefPtr<DataType>& data_type) const {
+    return data_type->value_type() == CASS_VALUE_TYPE_INET;
+  }
+};
+
+template<>
+struct IsValidDataType<CassDecimal> {
+  bool operator()(CassDecimal, const SharedRefPtr<DataType>& data_type) const {
+    return data_type->value_type() == CASS_VALUE_TYPE_DECIMAL;
+  }
+};
+
+template<>
+struct IsValidDataType<CassCustom> {
+  bool operator()(CassCustom, const SharedRefPtr<DataType>& data_type) const {
+    return true;
+  }
+};
+
+template<>
+struct IsValidDataType<const Collection*> {
+  bool operator()(const Collection* value, const SharedRefPtr<DataType>& data_type) const;
+};
+
+template<>
+struct IsValidDataType<const UserTypeValue*> {
+  bool operator()(const UserTypeValue* value, const SharedRefPtr<DataType>& data_type) const;
 };
 
 } // namespace cass

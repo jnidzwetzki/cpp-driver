@@ -17,159 +17,56 @@
 #include "statement.hpp"
 
 #include "execute_request.hpp"
-#include "result_metadata.hpp"
+#include "external_types.hpp"
+#include "macros.hpp"
 #include "prepared.hpp"
 #include "query_request.hpp"
 #include "scoped_ptr.hpp"
 #include "string_ref.hpp"
-#include "types.hpp"
 
 #include <uv.h>
 
 namespace cass {
 
-  template<class T>
-  struct IsValidValueType;
-
-  template<>
-  struct IsValidValueType<CassNull> {
-    bool operator()(uint16_t type) const {
-      return true;
-    }
-  };
-
-  template<>
-  struct IsValidValueType<cass_int32_t> {
-    bool operator()(uint16_t type) const {
-      return type == CASS_VALUE_TYPE_INT;
-    }
-  };
-
-  template<>
-  struct IsValidValueType<cass_int64_t> {
-    bool operator()(uint16_t type) const {
-      return type == CASS_VALUE_TYPE_BIGINT ||
-          type == CASS_VALUE_TYPE_COUNTER ||
-          type == CASS_VALUE_TYPE_TIMESTAMP;
-    }
-  };
-
-  template<>
-  struct IsValidValueType<cass_float_t> {
-    bool operator()(uint16_t type) const {
-      return type == CASS_VALUE_TYPE_FLOAT;
-    }
-  };
-
-  template<>
-  struct IsValidValueType<cass_double_t> {
-    bool operator()(uint16_t type) const {
-      return type == CASS_VALUE_TYPE_DOUBLE;
-    }
-  };
-
-  template<>
-  struct IsValidValueType<bool> {
-    bool operator()(uint16_t type) const {
-      return type == CASS_VALUE_TYPE_BOOLEAN;
-    }
-  };
-
-  template<>
-  struct IsValidValueType<CassString> {
-    bool operator()(uint16_t type) const {
-      return type == CASS_VALUE_TYPE_ASCII ||
-          type == CASS_VALUE_TYPE_TEXT ||
-          type == CASS_VALUE_TYPE_VARCHAR;
-    }
-  };
-
-  template<>
-  struct IsValidValueType<CassBytes> {
-    bool operator()(uint16_t type) const {
-      return type == CASS_VALUE_TYPE_BLOB;
-    }
-  };
-
-  template<>
-  struct IsValidValueType<CassUuid> {
-    bool operator()(uint16_t type) const {
-      return type == CASS_VALUE_TYPE_TIMEUUID ||
-          type == CASS_VALUE_TYPE_UUID;
-    }
-  };
-
-  template<>
-  struct IsValidValueType<CassInet> {
-    bool operator()(uint16_t type) const {
-      return type == CASS_VALUE_TYPE_INET;
-    }
-  };
-
-  template<>
-  struct IsValidValueType<CassDecimal> {
-    bool operator()(uint16_t type) const {
-      return type == CASS_VALUE_TYPE_DECIMAL;
-    }
-  };
-
-  template<>
-  struct IsValidValueType<const CassCollection*> {
-    bool operator()(uint16_t type) const {
-      // TODO(mpenick): Check actual type against collection
-      return type == CASS_VALUE_TYPE_LIST ||
-          type == CASS_VALUE_TYPE_MAP ||
-          type == CASS_VALUE_TYPE_SET;
-    }
-  };
-
-  template<>
-  struct IsValidValueType<CassCustom> {
-    bool operator()(uint16_t type) const {
-      return true;
-    }
-  };
-
-  template<class T>
-  CassError bind_by_name(cass::Statement* statement,
-                         StringRef name,
-                         T value) {
-    if (statement->opcode() != CQL_OPCODE_EXECUTE) {
-      return CASS_ERROR_LIB_INVALID_STATEMENT_TYPE;
-    }
-
-    const cass::ResultResponse* result
-        = static_cast<cass::ExecuteRequest*>(statement)->prepared()->result().get();
-
-    cass::HashIndex::IndexVec indices;
-    result->find_column_indices(name, &indices);
-    IsValidValueType<T> is_valid_type;
-
-    if (indices.empty()) {
-      return CASS_ERROR_LIB_NAME_DOES_NOT_EXIST;
-    }
-
-    for (cass::HashIndex::IndexVec::const_iterator it = indices.begin(),
-         end = indices.end(); it != end; ++it) {
-      size_t index = *it;
-      if (!is_valid_type(result->metadata()->get_indexes(index).type)) {
-        return CASS_ERROR_LIB_INVALID_VALUE_TYPE;
-      }
-      statement->bind(index, value);
-    }
-
-    return CASS_OK;
+template<class T>
+CassError bind_by_name(cass::Statement* statement,
+                       StringRef name,
+                       T value) {
+  const SharedRefPtr<ResultMetadata>& metadata(statement->metadata());
+  if (!metadata) {
+    return CASS_ERROR_LIB_INVALID_STATEMENT_TYPE;
   }
+
+  cass::HashIndex::IndexVec indices;
+  metadata->get_indices(name, &indices);
+
+  if (indices.empty()) {
+    return CASS_ERROR_LIB_NAME_DOES_NOT_EXIST;
+  }
+
+  for (cass::HashIndex::IndexVec::const_iterator it = indices.begin(),
+       end = indices.end(); it != end; ++it) {
+    size_t index = *it;
+    CassError rc = validate_type(metadata, index, value);
+    if (rc != CASS_OK) return rc;
+    statement->bind(index, value);
+  }
+
+  return CASS_OK;
+}
 
 } // namespace cass
 
 extern "C" {
 
-CassStatement* cass_statement_new(const char* query, size_t parameter_count) {
-  return cass_statement_new_n(query, strlen(query), parameter_count);
+CassStatement* cass_statement_new(CassSession* session,
+                                  const char* query,
+                                  size_t parameter_count) {
+  return cass_statement_new_n(session, query, strlen(query), parameter_count);
 }
 
-CassStatement* cass_statement_new_n(const char* query,
+CassStatement* cass_statement_new_n(CassSession* session,
+                                    const char* query,
                                     size_t query_length,
                                     size_t parameter_count) {
   cass::QueryRequest* query_request = new cass::QueryRequest(parameter_count);
@@ -226,35 +123,42 @@ CassError cass_statement_set_paging_state(CassStatement* statement,
   return CASS_OK;
 }
 
-CassError cass_statement_bind_null(CassStatement* statement,
-                                   size_t index) {
-  return statement->bind(index, cass::CassNull());
-}
+#define CASS_STATEMENT_BIND(Name, Params, Value) \
+  CassError cass_statement_bind_##Name(CassStatement* statement, \
+                                      size_t index Params) { \
+    return statement->bind(index, Value); \
+  } \
+  CassError cass_statement_bind_##Name##_by_name(CassStatement* statement, \
+                                                const char* name Params) { \
+    return cass::bind_by_name(statement, cass::StringRef(name), Value); \
+  } \
+  CassError cass_statement_bind_##Name##_by_name_n(CassStatement* statement, \
+                                                   const char* name, \
+                                                   size_t name_length Params) { \
+    return cass::bind_by_name(statement, cass::StringRef(name, name_length), Value); \
+  }
 
-CassError cass_statement_bind_int32(CassStatement* statement, size_t index,
-                                    cass_int32_t value) {
-  return statement->bind(index, value);
-}
+CASS_STATEMENT_BIND(null, , cass::CassNull())
+CASS_STATEMENT_BIND(int32, ONE_PARAM_(cass_int32_t value), value)
+CASS_STATEMENT_BIND(int64, ONE_PARAM_(cass_int64_t) value, value)
+CASS_STATEMENT_BIND(float, ONE_PARAM_(cass_float_t value), value)
+CASS_STATEMENT_BIND(double, ONE_PARAM_(cass_double_t value), value)
+CASS_STATEMENT_BIND(bool, ONE_PARAM_(cass_bool_t value), value == cass_true)
+CASS_STATEMENT_BIND(uuid, ONE_PARAM_(CassUuid value), value)
+CASS_STATEMENT_BIND(inet, ONE_PARAM_(CassInet value), value)
+CASS_STATEMENT_BIND(collection, ONE_PARAM_(const CassCollection* value), value->from())
+CASS_STATEMENT_BIND(user_type, ONE_PARAM_(const CassUserType* value), value->from())
+CASS_STATEMENT_BIND(bytes,
+                    TWO_PARAMS_(const cass_byte_t* value, size_t value_size),
+                    cass::CassBytes(value, value_size))
+CASS_STATEMENT_BIND(custom,
+                    TWO_PARAMS_(size_t size, cass_byte_t** output),
+                    cass::CassCustom(output, size))
+CASS_STATEMENT_BIND(decimal,
+                    THREE_PARAMS_(const cass_byte_t* varint, size_t varint_size, int scale),
+                    cass::CassDecimal(varint, varint_size, scale))
 
-CassError cass_statement_bind_int64(CassStatement* statement, size_t index,
-                                    cass_int64_t value) {
-  return statement->bind(index, value);
-}
-
-CassError cass_statement_bind_float(CassStatement* statement, size_t index,
-                                    cass_float_t value) {
-  return statement->bind(index, value);
-}
-
-CassError cass_statement_bind_double(CassStatement* statement, size_t index,
-                                     cass_double_t value) {
-  return statement->bind(index, value);
-}
-
-CassError cass_statement_bind_bool(CassStatement* statement, size_t index,
-                                   cass_bool_t value) {
-  return statement->bind(index, value == cass_true);
-}
+#undef CASS_STATEMENT_BIND
 
 CassError cass_statement_bind_string(CassStatement* statement, size_t index,
                                      const char* value) {
@@ -264,144 +168,15 @@ CassError cass_statement_bind_string(CassStatement* statement, size_t index,
 
 CassError cass_statement_bind_string_n(CassStatement* statement, size_t index,
                                        const char* value, size_t value_length) {
-  cass::CassString s = { value, value_length };
-  return statement->bind(index, s);
+  return statement->bind(index, cass::CassString(value, value_length));
 }
-
-CassError cass_statement_bind_bytes(CassStatement* statement, size_t index,
-                                    const cass_byte_t* value,
-                                    size_t value_size) {
-  cass::CassBytes b = { value, value_size };
-  return statement->bind(index, b);
-}
-
-CassError cass_statement_bind_uuid(CassStatement* statement, size_t index,
-                                   CassUuid value) {
-  return statement->bind(index, value);
-}
-
-CassError cass_statement_bind_inet(CassStatement* statement, size_t index,
-                                   CassInet value) {
-  return statement->bind(index, value);
-}
-
-CassError cass_statement_bind_decimal(CassStatement* statement,
-                                      size_t index,
-                                      const cass_byte_t* varint,
-                                      size_t varint_size,
-                                      cass_int32_t scale) {
-  cass::CassDecimal d = { varint, varint_size, scale };
-  return statement->bind(index, d);
-}
-
-CassError cass_statement_bind_collection(CassStatement* statement, size_t index,
-                                         const CassCollection* collection) {
-  return statement->bind(index, collection->from());
-}
-
-CassError cass_statement_bind_custom(CassStatement* statement,
-                                     size_t index, size_t size,
-                                     cass_byte_t** output) {
-  cass::CassCustom c = { output, size };
-  return statement->bind(index, c);
-}
-
-CassError cass_statement_bind_null_by_name(CassStatement* statement,
-                                           const char* name) {
-  return cass_statement_bind_null_by_name_n(statement,
-                                            name, strlen(name));
-}
-
-CassError cass_statement_bind_null_by_name_n(CassStatement* statement,
-                                             const char* name,
-                                             size_t name_length) {
-  return cass::bind_by_name<cass::CassNull>(statement,
-                                      cass::StringRef(name, name_length),
-                                      cass::CassNull());
-}
-
-CassError cass_statement_bind_int32_by_name(CassStatement* statement,
-                                            const char* name,
-                                            cass_int32_t value) {
-  return cass_statement_bind_int32_by_name_n(statement,
-                                             name, strlen(name),
-                                             value);
-}
-
-CassError cass_statement_bind_int32_by_name_n(CassStatement* statement,
-                                              const char* name,
-                                              size_t name_length,
-                                              cass_int32_t value) {
-  return cass::bind_by_name<cass_int32_t>(statement, cass::StringRef(name, name_length), value);
-}
-
-CassError cass_statement_bind_int64_by_name(CassStatement* statement,
-                                            const char* name,
-                                            cass_int64_t value) {
-  return cass_statement_bind_int64_by_name_n(statement,
-                                             name, strlen(name),
-                                             value);
-}
-
-CassError cass_statement_bind_int64_by_name_n(CassStatement* statement,
-                                              const char* name,
-                                              size_t name_length,
-                                              cass_int64_t value) {
-  return cass::bind_by_name<cass_int64_t>(statement, cass::StringRef(name, name_length), value);
-}
-
-CassError cass_statement_bind_float_by_name(CassStatement* statement,
-                                            const char* name,
-                                            cass_float_t value) {
-  return cass_statement_bind_float_by_name_n(statement,
-                                             name, strlen(name),
-                                             value);
-}
-
-CassError cass_statement_bind_float_by_name_n(CassStatement* statement,
-                                              const char* name,
-                                              size_t name_length,
-                                              cass_float_t value) {
-  return cass::bind_by_name<cass_float_t>(statement, cass::StringRef(name, name_length), value);
-}
-
-CassError cass_statement_bind_double_by_name(CassStatement* statement,
-                                             const char* name,
-                                             cass_double_t value) {
-  return cass_statement_bind_double_by_name_n(statement,
-                                              name, strlen(name),
-                                              value);
-}
-
-CassError cass_statement_bind_double_by_name_n(CassStatement* statement,
-                                               const char* name,
-                                               size_t name_length,
-                                               cass_double_t value) {
-  return cass::bind_by_name<cass_double_t>(statement, cass::StringRef(name, name_length), value);
-}
-
-CassError cass_statement_bind_bool_by_name(CassStatement* statement,
-                                           const char* name,
-                                           cass_bool_t value) {
-  return cass_statement_bind_bool_by_name_n(statement,
-                                            name, strlen(name),
-                                            value);
-}
-
-CassError cass_statement_bind_bool_by_name_n(CassStatement* statement,
-                                             const char* name,
-                                             size_t name_length,
-                                             cass_bool_t value) {
-  return cass::bind_by_name<bool>(statement, cass::StringRef(name, name_length), value == cass_true);
-}
-
 
 CassError cass_statement_bind_string_by_name(CassStatement* statement,
                                              const char* name,
                                              const char* value) {
-  return cass_statement_bind_string_by_name_n(statement,
-                                              name, strlen(name),
-                                              value, strlen(value));
+  return cass::bind_by_name(statement,
+                            cass::StringRef(name),
+                            cass::CassString(value, strlen(value)));
 }
 
 CassError cass_statement_bind_string_by_name_n(CassStatement* statement,
@@ -409,113 +184,9 @@ CassError cass_statement_bind_string_by_name_n(CassStatement* statement,
                                                size_t name_length,
                                                const char* value,
                                                size_t value_length) {
-  cass::CassString s = { value, value_length };
-  return cass::bind_by_name<cass::CassString>(statement, cass::StringRef(name, name_length), s);
-}
-
-CassError cass_statement_bind_bytes_by_name(CassStatement* statement,
-                                            const char* name,
-                                            cass_byte_t* value,
-                                            size_t value_size) {
-  return cass_statement_bind_bytes_by_name_n(statement,
-                                             name, strlen(name),
-                                             value, value_size);
-}
-
-CassError cass_statement_bind_bytes_by_name_n(CassStatement* statement,
-                                              const char* name,
-                                              size_t name_length,
-                                              cass_byte_t* value,
-                                              size_t value_size) {
-  cass::CassBytes b = { value, value_size };
-  return cass::bind_by_name<cass::CassBytes>(statement, cass::StringRef(name, name_length), b);
-}
-
-
-CassError cass_statement_bind_uuid_by_name(CassStatement* statement,
-                                           const char* name,
-                                           CassUuid value) {
-  return cass_statement_bind_uuid_by_name_n(statement,
-                                            name, strlen(name),
-                                            value);
-}
-
-CassError cass_statement_bind_uuid_by_name_n(CassStatement* statement,
-                                             const char* name,
-                                             size_t name_length,
-                                             CassUuid value) {
-  return cass::bind_by_name<CassUuid>(statement, cass::StringRef(name, name_length), value);
-}
-
-
-CassError cass_statement_bind_inet_by_name(CassStatement* statement,
-                                           const char* name,
-                                           CassInet value) {
-  return cass_statement_bind_inet_by_name_n(statement,
-                                            name, strlen(name),
-                                            value);
-}
-
-CassError cass_statement_bind_inet_by_name_n(CassStatement* statement,
-                                             const char* name,
-                                             size_t name_length,
-                                             CassInet value) {
-  return cass::bind_by_name<CassInet>(statement, cass::StringRef(name, name_length), value);
-}
-
-
-CassError cass_statement_bind_decimal_by_name(CassStatement* statement,
-                                              const char* name,
-                                              const cass_byte_t* varint,
-                                              size_t varint_size,
-                                              cass_int32_t scale) {
-  return cass_statement_bind_decimal_by_name_n(statement,
-                                               name, strlen(name),
-                                               varint, varint_size,
-                                               scale);
-}
-
-CassError cass_statement_bind_decimal_by_name_n(CassStatement* statement,
-                                                const char* name,
-                                                size_t name_length,
-                                                const cass_byte_t* varint,
-                                                size_t varint_size,
-                                                cass_int32_t scale) {
-  cass::CassDecimal d = { varint, varint_size, scale };
-  return cass::bind_by_name<cass::CassDecimal>(statement, cass::StringRef(name, name_length), d);
-}
-
-CassError cass_statement_bind_custom_by_name(CassStatement* statement,
-                                             const char* name,
-                                             size_t size,
-                                             cass_byte_t** output) {
-  return cass_statement_bind_custom_by_name_n(statement,
-                                              name, strlen(name),
-                                              size, output);
-}
-
-CassError cass_statement_bind_custom_by_name_n(CassStatement* statement,
-                                               const char* name,
-                                               size_t name_length,
-                                               size_t size,
-                                               cass_byte_t** output) {
-  cass::CassCustom c = { output, size };
-  return cass::bind_by_name<cass::CassCustom>(statement, cass::StringRef(name, name_length), c);
-}
-
-CassError cass_statement_bind_collection_by_name(CassStatement* statement,
-                                                 const char* name,
-                                                 const CassCollection* collection) {
-  return cass_statement_bind_collection_by_name_n(statement,
-                                                  name, strlen(name),
-                                                  collection);
-}
-
-CassError cass_statement_bind_collection_by_name_n(CassStatement* statement,
-                                                   const char* name,
-                                                   size_t name_length,
-                                                   const CassCollection* collection) {
-  return cass::bind_by_name<const CassCollection*>(statement, cass::StringRef(name, name_length), collection);
+  return cass::bind_by_name(statement,
+                            cass::StringRef(name, name_length),
+                            cass::CassString(value, value_length));
 }
 
 } // extern "C"
@@ -524,9 +195,9 @@ namespace cass {
 
 int32_t Statement::encode_values(BufferVec* bufs) const {
   int32_t values_size = 0;
-  for (InputValueVec::const_iterator i = values_.begin(), end = values_.end();
+  for (BufferVec::const_iterator i = values_.begin(), end = values_.end();
        i != end; ++i) {
-    bufs->push_back((*i)->encode());
+    bufs->push_back(*i);
     values_size += bufs->back().size();
   }
   return values_size;
@@ -537,27 +208,15 @@ bool Statement::get_routing_key(std::string* routing_key)  const {
 
   if (key_indices_.size() == 1) {
       assert(key_indices_.front() < values_.size());
-      const SharedRefPtr<const InputValue>& value = values_[key_indices_.front()];
-      // TODO: Routing key check
-      if (!value->is_routable()) {
-        LOG_ERROR("Routing key cannot contain a collection or null value");
-        return false;
-      }
-      Buffer encoded = value->encode();
-      routing_key->assign(encoded.data() + sizeof(int32_t), encoded.size());
+      Buffer buf(values_[key_indices_.front()]);
+      routing_key->assign(buf.data() + sizeof(int32_t), buf.size());
   } else {
     size_t length = 0;
 
     for (std::vector<size_t>::const_iterator i = key_indices_.begin();
          i != key_indices_.end(); ++i) {
       assert(*i < values_.size());
-      const SharedRefPtr<const InputValue>& value = values_[*i];
-      // TODO: Routing key check
-      if (!value->is_routable()) {
-        LOG_ERROR("Routing key cannot contain a collection or null value");
-        return false;
-      }
-      length += sizeof(uint16_t) + value->get_size() + 1;
+      length += sizeof(uint16_t) + values_[*i].size() + 1;
     }
 
     routing_key->clear();
@@ -566,12 +225,12 @@ bool Statement::get_routing_key(std::string* routing_key)  const {
     for (std::vector<size_t>::const_iterator i = key_indices_.begin();
          i != key_indices_.end(); ++i) {
 
-      Buffer encoded = values_[*i]->encode();
+      Buffer buf(values_[*i]);
 
       char size_buf[sizeof(uint16_t)];
-      encode_uint16(size_buf, encoded.size());
+      encode_uint16(size_buf, buf.size());
       routing_key->append(size_buf, sizeof(uint16_t));
-      routing_key->append(encoded.data() + sizeof(int32_t), encoded.size());
+      routing_key->append(buf.data() + sizeof(int32_t), buf.size());
       routing_key->push_back(0);
     }
   }

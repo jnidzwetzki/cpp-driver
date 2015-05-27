@@ -28,13 +28,10 @@ public:
 
   struct Entry {
     Entry()
-      : name(NULL)
-      , name_size(0)
-      , index(0)
+      : index(0)
       , next(NULL) { }
 
-    const char* name;
-    size_t name_size;
+    StringRef name;
     size_t index;
     Entry* next;
   };

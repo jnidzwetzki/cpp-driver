@@ -18,6 +18,7 @@
 #define __CASS_METADATA_HPP_INCLUDED__
 
 #include "cassandra.h"
+#include "data_type.hpp"
 #include "fixed_vector.hpp"
 #include "hash_index.hpp"
 #include "list.hpp"
@@ -34,48 +35,18 @@
 namespace cass {
 
 struct ColumnDefinition : public HashIndex::Entry {
-  ColumnDefinition()
-      : type(CASS_VALUE_TYPE_UNKNOWN)
-      , keyspace(NULL)
-      , keyspace_size(0)
-      , table(NULL)
-      , table_size(0)
-      , class_name(NULL)
-      , class_name_size(0)
-      , collection_primary_type(CASS_VALUE_TYPE_UNKNOWN)
-      , collection_primary_class(NULL)
-      , collection_primary_class_size(0)
-      , collection_secondary_type(CASS_VALUE_TYPE_UNKNOWN)
-      , collection_secondary_class(NULL)
-      , collection_secondary_class_size(0) {}
-
-  uint16_t type;
-  char* keyspace;
-  size_t keyspace_size;
-
-  char* table;
-  size_t table_size;
-
-  char* class_name;
-  size_t class_name_size;
-
-  uint16_t collection_primary_type;
-  char* collection_primary_class;
-
-  size_t collection_primary_class_size;
-  uint16_t collection_secondary_type;
-
-  char* collection_secondary_class;
-  size_t collection_secondary_class_size;
+  StringRef keyspace;
+  StringRef table;
+  SharedRefPtr<DataType> data_type;
 };
 
 class ResultMetadata : public RefCounted<ResultMetadata> {
 public:
   ResultMetadata(size_t column_count);
 
-  const ColumnDefinition& get_indexes(size_t index) const { return defs_[index]; }
+  const ColumnDefinition& get_column_definition(size_t index) const { return defs_[index]; }
 
-  size_t get_indexes(StringRef name, HashIndex::IndexVec* result) const;
+  size_t get_indices(StringRef name, HashIndex::IndexVec* result) const;
 
   size_t column_count() const { return defs_.size(); }
 

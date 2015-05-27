@@ -19,8 +19,8 @@
 
 #include "cassandra.h"
 #include "data_type.hpp"
-#include "output_value.hpp"
 #include "ref_counted.hpp"
+#include "value.hpp"
 
 #include <map>
 #include <string>

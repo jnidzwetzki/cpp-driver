@@ -189,6 +189,7 @@ private:
     bool is_flushed_;
     size_t size_;
     BufferVec buffers_;
+    UvBufVec uv_bufs_;
     List<Handler> handlers_;
   };
 

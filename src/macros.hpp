@@ -23,6 +23,15 @@
 
 #define UNUSED_(X) ((void)X)
 
+#define ONE_PARAM1_(A) ,A
+#define ONE_PARAM_(A) ONE_PARAM1_(A)
+
+#define TWO_PARAMS1_(A, B)  ,A,B
+#define TWO_PARAMS_(A, B) TWO_PARAMS1_(A, B)
+
+#define THREE_PARAMS1_(A, B, C)  ,A,B,C
+#define THREE_PARAMS_(A, B, C) THREE_PARAMS1_(A, B, C)
+
 #endif
 
 

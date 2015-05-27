@@ -31,7 +31,7 @@ ResultMetadata::ResultMetadata(size_t column_count)
   defs_.reserve(column_count);
 }
 
-size_t ResultMetadata::get_indexes(StringRef name,
+size_t ResultMetadata::get_indices(StringRef name,
                            HashIndex::IndexVec* result) const{
   return index_.get(name, result);
 }

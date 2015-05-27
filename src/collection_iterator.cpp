@@ -19,18 +19,20 @@
 namespace cass {
 
 char* CollectionIterator::decode_value(char* position) {
-  uint16_t size;
-  char* buffer = decode_uint16(position, size);
+  int protocol_version = collection_->protocol_version();
 
-  CassValueType type;
-  if (collection_->type() == CASS_VALUE_TYPE_MAP) {
-    type = (index_ % 2 == 0) ? collection_->primary_type()
-                             : collection_->secondary_type();
+  int32_t size;
+  char* buffer = decode_size(protocol_version, position, size);
+
+  SharedRefPtr<DataType> data_type;
+  if (collection_->value_type() == CASS_VALUE_TYPE_MAP) {
+    data_type = (index_ % 2 == 0) ? collection_->primary_data_type()
+                                  : collection_->secondary_data_type();
   } else {
-    type = collection_->primary_type();
+    data_type = collection_->primary_data_type();
   }
 
-  value_ = OutputValue(type, buffer, size);
+  value_ = Value(protocol_version, data_type, buffer, size);
 
   return buffer + size;
 }

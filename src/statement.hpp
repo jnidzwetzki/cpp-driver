@@ -18,19 +18,34 @@
 #define __CASS_STATEMENT_HPP_INCLUDED__
 
 #include "buffer.hpp"
-#include "input_value.hpp"
+#include "collection.hpp"
+#include "constants.hpp"
+#include "encode.hpp"
 #include "macros.hpp"
 #include "request.hpp"
+#include "result_metadata.hpp"
+#include "result_response.hpp"
+#include "types.hpp"
+#include "user_type_value.hpp"
 
 #include <vector>
 #include <string>
 
-#define CASS_VALUE_CHECK_INDEX(i)              \
-  if (index >= values_count()) {               \
-    return CASS_ERROR_LIB_INDEX_OUT_OF_BOUNDS; \
-  }
-
 namespace cass {
+
+template<class T>
+CassError validate_type(const SharedRefPtr<ResultMetadata>& metadata,
+                        size_t index,
+                        const T value) {
+  IsValidDataType<T> is_valid_type;
+  if (index >= metadata->column_count()) {
+    return CASS_ERROR_LIB_INDEX_OUT_OF_BOUNDS;
+  }
+  if(!is_valid_type(value, metadata->get_column_definition(index).data_type)) {
+      return CASS_ERROR_LIB_INVALID_VALUE_TYPE;
+  }
+  return CASS_OK;
+}
 
 class Statement : public RoutableRequest {
 public:
@@ -75,19 +90,32 @@ public:
 
   virtual const std::string& query() const = 0;
 
+  const SharedRefPtr<ResultMetadata>& metadata() const {
+    return metadata_;
+  }
+
   size_t values_count() const { return values_.size(); }
 
   void add_key_index(size_t index) { key_indices_.push_back(index); }
 
-  virtual bool get_routing_key(std::string* routing_key)  const;
+  virtual bool get_routing_key(std::string* routing_key) const;
 
-#define BIND_TYPE(DeclType) \
+
+#define CHECK_INDEX_AND_TYPE(index, value) do { \
+  if (index >= values_count()) {                \
+    return CASS_ERROR_LIB_INDEX_OUT_OF_BOUNDS;  \
+  }                                             \
+  CassError rc = validate_type(index, value);   \
+  if (rc != CASS_OK) return rc;                 \
+} while(0)
+
+#define BIND_TYPE(DeclType)                            \
   CassError bind(size_t index, const DeclType value) { \
-    CASS_VALUE_CHECK_INDEX(index); \
-    values_[index] \
-      = SharedRefPtr<const InputValue>(new SimpleInputValue(value)); \
-    return CASS_OK; \
+    CHECK_INDEX_AND_TYPE(index, value);                \
+    values_[index]  = encode_with_length(value);       \
+    return CASS_OK;                                    \
   }
+
   BIND_TYPE(cass_int32_t)
   BIND_TYPE(cass_int64_t)
   BIND_TYPE(cass_float_t)
@@ -98,44 +126,54 @@ public:
   BIND_TYPE(CassUuid)
   BIND_TYPE(CassInet)
   BIND_TYPE(CassDecimal)
+  BIND_TYPE(CassNull)
+
 #undef BIND_TYPE
 
-  CassError bind(size_t index, CassNull) {
-    CASS_VALUE_CHECK_INDEX(index);
-    values_[index] = SharedRefPtr<const InputValue>(new NullInputValue());
-    return CASS_OK;
-  }
-
   CassError bind(size_t index, CassCustom custom) {
-    CASS_VALUE_CHECK_INDEX(index);
-    SharedRefPtr<CustomInputValue> output(new CustomInputValue(custom.output_size));
-    *(custom.output) = reinterpret_cast<uint8_t*>(output->data());
-    values_[index] = static_cast<SharedRefPtr<const InputValue> >(output);
+    CHECK_INDEX_AND_TYPE(index, custom);
+    Buffer value(custom.output_size);
+    values_[index] = value;
+    *(custom.output) = reinterpret_cast<uint8_t*>(value.data());
     return CASS_OK;
   }
 
-  CassError bind(size_t index, const CollectionInputValue* collection) {
-    CASS_VALUE_CHECK_INDEX(index);
+  CassError bind(size_t index, const Collection* collection) {
+    CHECK_INDEX_AND_TYPE(index, collection);
     if (collection->type() == CASS_COLLECTION_TYPE_MAP &&
         collection->items().size() % 2 != 0) {
       return CASS_ERROR_LIB_INVALID_ITEM_COUNT;
     }
-    values_[index] = SharedRefPtr<const InputValue>(collection);
+    values_[index] = collection->encode_with_length();
     return CASS_OK;
   }
 
-  CassError bind(size_t index, const UserTypeInputValue* user_type) {
-    CASS_VALUE_CHECK_INDEX(index);
-    values_[index] = SharedRefPtr<const InputValue>(user_type);
+  CassError bind(size_t index, const UserTypeValue* user_type) {
+    CHECK_INDEX_AND_TYPE(index, user_type);
     return CASS_OK;
   }
+
+#undef CHECK_INDEX_AND_TYPE
 
   int32_t encode_values(BufferVec*  bufs) const;
 
+protected:
+  SharedRefPtr<ResultMetadata> metadata_;
+
 private:
+  template <class T>
+  CassError validate_type(size_t index, const T value) const {
+    // This can only validate statements with prepared data
+    if (!metadata_) {
+      return CASS_OK;
+    }
+    return cass::validate_type(metadata_, index, value);
+    return CASS_OK;
+  }
+
   typedef BufferVec ValueVec;
 
-  InputValueVec values_;
+  ValueVec values_;
 
   bool skip_metadata_;
   int32_t page_size_;

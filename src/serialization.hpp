@@ -61,6 +61,17 @@ inline char* decode_uint16(char* input, uint16_t& output) {
   return input + sizeof(uint16_t);
 }
 
+inline void encode_int16(char* output, int16_t value) {
+  output[0] = static_cast<char>(value >> 8);
+  output[1] = static_cast<char>(value >> 0);
+}
+
+inline char* decode_int16(char* input, int16_t& output) {
+  output = (static_cast<int16_t>(static_cast<uint8_t>(input[1])) << 0) |
+           (static_cast<int16_t>(static_cast<uint8_t>(input[0])) << 8);
+  return input + sizeof(int16_t);
+}
+
 inline void encode_int32(char* output, int32_t value) {
   output[0] = static_cast<char>(value >> 24);
   output[1] = static_cast<char>(value >> 16);
@@ -146,15 +157,6 @@ inline char* decode_string(char* input, char** output, size_t& size) {
   *output = pos;
   return pos + string_size;
 }
-
-// TODO: Make all decode functions work with const
-inline char* decode_const_string(char* input, const char** output, size_t &size) {
-  char* temp;
- char* pos =  decode_string(input, &temp, size);
-  *output = temp;
- return pos;
-}
-
 
 inline char* decode_string_ref(char* buffer, StringRef* output) {
   char* str;
@@ -313,6 +315,18 @@ inline char* decode_uuid(char* input, CassUuid* output) {
     output->clock_seq_and_node |= static_cast<uint64_t>(static_cast<uint8_t>(input[15 - i])) << (8 * i);
   }
   return input + 16;
+}
+
+inline char* decode_size(int protocol_version, char* input, int32_t& size) {
+  char* pos;
+  if (protocol_version >= 3) {
+    pos = decode_int32(input, size);
+  } else {
+    uint16_t temp;
+    pos = decode_uint16(input, temp);
+    size = temp;
+  }
+  return pos;
 }
 
 } // namespace cass

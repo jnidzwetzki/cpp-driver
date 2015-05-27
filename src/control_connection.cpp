@@ -66,8 +66,8 @@ private:
 };
 
 bool ControlConnection::determine_address_for_peer_host(const Address& connected_address,
-                                                        const OutputValue* peer_value,
-                                                        const OutputValue* rpc_value,
+                                                        const Value* peer_value,
+                                                        const Value* rpc_value,
                                                         Address* output) {
   Address peer_address;
   Address::from_inet(peer_value->data(), peer_value->size(),
@@ -200,7 +200,7 @@ void ControlConnection::on_close(Connection* connection) {
   bool retry_current_host = false;
 
   if (state_ != CONTROL_STATE_CLOSED) {
-    LOG_WARN("Lost connection on host %s", connection->address_string().c_str());
+    LOG_WARN("Lost control connection on host %s", connection->address_string().c_str());
   }
 
   // This pointer to the connection is no longer valid once it's closed
@@ -550,7 +550,7 @@ void ControlConnection::on_refresh_node_info_all(ControlConnection* control_conn
 }
 
 void ControlConnection::update_node_info(SharedRefPtr<Host> host, const Row* row) {
-  const OutputValue* v;
+  const Value* v;
 
   std::string rack;
   row->get_string_by_name("rack", &rack);

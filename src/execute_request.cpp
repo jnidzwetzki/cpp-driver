@@ -21,10 +21,8 @@ namespace cass {
 int ExecuteRequest::encode(int version, BufferVec* bufs) const {
   if (version == 1) {
     return encode_v1(bufs);
-  } else if (version == 2) {
-    return encode_v2(bufs);
   } else {
-    return ENCODE_ERROR_UNSUPPORTED_PROTOCOL;
+    return encode(bufs);
   }
 }
 
@@ -63,7 +61,7 @@ int ExecuteRequest::encode_v1(BufferVec* bufs) const {
   return length;
 }
 
-int ExecuteRequest::encode_v2(BufferVec* bufs) const {
+int ExecuteRequest::encode(BufferVec* bufs) const {
   uint8_t flags = 0;
   size_t length = 0;
 

@@ -20,7 +20,7 @@
 #include "map_iterator.hpp"
 #include "result_iterator.hpp"
 #include "row_iterator.hpp"
-#include "types.hpp"
+#include "external_types.hpp"
 
 extern "C" {
 
@@ -37,14 +37,14 @@ CassIterator* cass_iterator_from_row(const CassRow* row) {
 }
 
 CassIterator* cass_iterator_from_collection(const CassValue* value) {
-  if (!cass_value_is_collection(value)) {
+  if (!value->is_collection()) {
     return NULL;
   }
   return CassIterator::to(new cass::CollectionIterator(value));
 }
 
 CassIterator* cass_iterator_from_map(const CassValue* value) {
-  if (value->type() != CASS_VALUE_TYPE_MAP) {
+  if (value->value_type() != CASS_VALUE_TYPE_MAP) {
     return NULL;
   }
   return CassIterator::to(new cass::MapIterator(value));

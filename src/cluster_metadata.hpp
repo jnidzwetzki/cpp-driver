@@ -41,6 +41,11 @@ public:
   const Schema& schema() const { return schema_; }
   Schema* copy_schema() const;// synchronized copy for API
 
+  SharedRefPtr<UserType> get_user_type(const std::string& keyspace,
+                                       const std::string& type_name) const {
+    return schema_.get_user_type(keyspace, type_name);
+  }
+
   void set_protocol_version(int version) { schema_.set_protocol_version(version); }
 
   const TokenMap& token_map() const { return token_map_; }

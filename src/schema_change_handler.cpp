@@ -60,7 +60,7 @@ bool SchemaChangeHandler::has_schema_agreement(const ResponseVec& responses) {
 
     const Row* row = &local_result->first_row();
 
-    const OutputValue* v = row->get_by_name("schema_version");
+    const Value* v = row->get_by_name("schema_version");
     if (!v->is_null()) {
       current_version = StringRef(v->data(), v->size());
     }
@@ -85,7 +85,7 @@ bool SchemaChangeHandler::has_schema_agreement(const ResponseVec& responses) {
                                                              &address);
 
     if (is_valid_address && request_handler_->is_host_up(address)) {
-      const OutputValue* v = row->get_by_name("schema_version");
+      const Value* v = row->get_by_name("schema_version");
       if (!row->get_by_name("rpc_address")->is_null() && !v->is_null()) {
         StringRef version(v->to_string_ref());
         if (version != current_version) {

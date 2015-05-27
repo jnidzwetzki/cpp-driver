@@ -70,7 +70,7 @@ public:
     : name_(name) {}
 
   SchemaMetadataField(const std::string& name,
-                      const OutputValue& value,
+                      const Value& value,
                       const SharedRefPtr<RefBuffer>& buffer)
     : name_(name)
     , value_(value)
@@ -80,13 +80,13 @@ public:
     return name_;
   }
 
-  const OutputValue* value() const {
+  const Value* value() const {
     return &value_;
   }
 
 private:
   std::string name_;
-  OutputValue value_;
+  Value value_;
   SharedRefPtr<RefBuffer> buffer_;
 };
 
@@ -218,11 +218,12 @@ class Schema {
 public:
   typedef SchemaMetadataIteratorImpl<KeyspaceMetadata> KeyspaceIterator;
   typedef std::map<std::string, KeyspaceMetadata*> KeyspacePointerMap;
-  typedef std::map<std::string, std::map<std::string, SharedRefPtr<UserType> > > UserTypeMap;
+  typedef std::map<std::string, SharedRefPtr<UserType> > UserTypeMap;
+  typedef std::map<std::string,  UserTypeMap> KeyspaceUserTypeMap;
 
   Schema()
     : keyspaces_(new KeyspaceMetadata::Map)
-    , user_types_(new UserTypeMap)
+    , user_types_(new KeyspaceUserTypeMap)
     , protocol_version_(0) {}
 
   void set_protocol_version(int version) {
@@ -231,6 +232,9 @@ public:
 
   const SchemaMetadata* get(const std::string& name) const;
   Iterator* iterator() const { return new KeyspaceIterator(*keyspaces_); }
+
+  SharedRefPtr<UserType> get_user_type(const std::string& keyspace,
+                                       const std::string& type_name) const;
 
   KeyspaceMetadata* get_or_create(const std::string& name) { return &(*keyspaces_)[name]; }
   KeyspacePointerMap update_keyspaces(ResultResponse* result);
@@ -250,7 +254,7 @@ private:
   // Really coarse grain copy-on-write. This could be made
   // more fine grain, but it might not be worth the work.
   CopyOnWritePtr<KeyspaceMetadata::Map> keyspaces_;
-  CopyOnWritePtr<UserTypeMap> user_types_;
+  CopyOnWritePtr<KeyspaceUserTypeMap> user_types_;
 
   // Only used internally on a single thread, there's
   // no need for copy-on-write.

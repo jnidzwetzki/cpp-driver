@@ -29,21 +29,21 @@ BOOST_AUTO_TEST_CASE(simple)
   cass::SharedRefPtr<cass::DataType> data_type;
 
   data_type = cass::TypeParser::parse_one("org.apache.cassandra.db.marshal.InetAddressType");
-  BOOST_CHECK(data_type->type() == CASS_VALUE_TYPE_INET);
+  BOOST_CHECK(data_type->value_type() == CASS_VALUE_TYPE_INET);
   BOOST_CHECK(data_type->is_frozen() == false);
 
   data_type = cass::TypeParser::parse_one("org.apache.cassandra.db.marshal.ReversedType(org.apache.cassandra.db.marshal.UTF8Type)");
-  BOOST_CHECK(data_type->type() == CASS_VALUE_TYPE_TEXT);
+  BOOST_CHECK(data_type->value_type() == CASS_VALUE_TYPE_TEXT);
   BOOST_CHECK(data_type->is_frozen() == false);
 
   data_type = cass::TypeParser::parse_one("org.apache.cassandra.db.marshal.ListType(org.apache.cassandra.db.marshal.UTF8Type)");
-  BOOST_REQUIRE(data_type->type() == CASS_VALUE_TYPE_LIST);
+  BOOST_REQUIRE(data_type->value_type() == CASS_VALUE_TYPE_LIST);
   BOOST_CHECK(data_type->is_frozen() == false);
 
   cass::SharedRefPtr<cass::CollectionType> collection
       = static_cast<cass::SharedRefPtr<cass::CollectionType> >(data_type);
   BOOST_REQUIRE(collection->types().size() == 1);
-  BOOST_CHECK(collection->types()[0]->type() == CASS_VALUE_TYPE_TEXT);
+  BOOST_CHECK(collection->types()[0]->value_type() == CASS_VALUE_TYPE_TEXT);
   BOOST_CHECK(collection->types()[0]->is_frozen() == false);
 }
 
@@ -88,7 +88,7 @@ BOOST_AUTO_TEST_CASE(udt)
                                     "70686f6e6573:org.apache.cassandra.db.marshal.SetType("
                                     "org.apache.cassandra.db.marshal.UserType(foo,70686f6e65,6e616d65:org.apache.cassandra.db.marshal.UTF8Type,6e756d626572:org.apache.cassandra.db.marshal.UTF8Type)))");
 
-  BOOST_REQUIRE(data_type->type() == CASS_VALUE_TYPE_UDT);
+  BOOST_REQUIRE(data_type->value_type() == CASS_VALUE_TYPE_UDT);
 
   // Check external UDT
 
@@ -103,23 +103,23 @@ BOOST_AUTO_TEST_CASE(udt)
   i = udt->fields().begin();
 
   BOOST_CHECK(i->name == "street");
-  BOOST_CHECK(i->type->type() == CASS_VALUE_TYPE_TEXT);
+  BOOST_CHECK(i->type->value_type() == CASS_VALUE_TYPE_TEXT);
 
   ++i;
 
   BOOST_CHECK(i->name == "zipcode");
-  BOOST_CHECK(i->type->type() == CASS_VALUE_TYPE_INT);
+  BOOST_CHECK(i->type->value_type() == CASS_VALUE_TYPE_INT);
 
   ++i;
 
   BOOST_CHECK(i->name == "phones");
-  BOOST_REQUIRE(i->type->type() == CASS_VALUE_TYPE_SET);
+  BOOST_REQUIRE(i->type->value_type() == CASS_VALUE_TYPE_SET);
 
   cass::SharedRefPtr<cass::CollectionType> collection
       = static_cast<cass::SharedRefPtr<cass::CollectionType> >(i->type);
 
   BOOST_REQUIRE(collection->types().size() == 1);
-  BOOST_REQUIRE(collection->types()[0]->type() == CASS_VALUE_TYPE_UDT);
+  BOOST_REQUIRE(collection->types()[0]->value_type() == CASS_VALUE_TYPE_UDT);
 
   // Check internal UDT
 
@@ -132,12 +132,12 @@ BOOST_AUTO_TEST_CASE(udt)
   i = udt->fields().begin();
 
   BOOST_CHECK(i->name == "name");
-  BOOST_CHECK(i->type->type() == CASS_VALUE_TYPE_TEXT);
+  BOOST_CHECK(i->type->value_type() == CASS_VALUE_TYPE_TEXT);
 
   ++i;
 
   BOOST_CHECK(i->name == "number");
-  BOOST_CHECK(i->type->type() == CASS_VALUE_TYPE_TEXT);
+  BOOST_CHECK(i->type->value_type() == CASS_VALUE_TYPE_TEXT);
 }
 
 BOOST_AUTO_TEST_CASE(tuple)
@@ -148,15 +148,15 @@ BOOST_AUTO_TEST_CASE(tuple)
                                     "org.apache.cassandra.db.marshal.UTF8Type,"
                                     "org.apache.cassandra.db.marshal.FloatType)");
 
-  BOOST_REQUIRE(data_type->type() == CASS_VALUE_TYPE_TUPLE);
+  BOOST_REQUIRE(data_type->value_type() == CASS_VALUE_TYPE_TUPLE);
 
   cass::SharedRefPtr<cass::TupleType> tuple = static_cast<cass::SharedRefPtr<cass::TupleType> >(data_type);
 
   BOOST_REQUIRE(tuple->types().size() == 3);
 
-  BOOST_REQUIRE(tuple->types()[0]->type() == CASS_VALUE_TYPE_INT);
-  BOOST_REQUIRE(tuple->types()[1]->type() == CASS_VALUE_TYPE_TEXT);
-  BOOST_REQUIRE(tuple->types()[2]->type() == CASS_VALUE_TYPE_FLOAT);
+  BOOST_REQUIRE(tuple->types()[0]->value_type() == CASS_VALUE_TYPE_INT);
+  BOOST_REQUIRE(tuple->types()[1]->value_type() == CASS_VALUE_TYPE_TEXT);
+  BOOST_REQUIRE(tuple->types()[2]->value_type() == CASS_VALUE_TYPE_FLOAT);
 }
 
 BOOST_AUTO_TEST_CASE(nested_collections)
@@ -168,24 +168,24 @@ BOOST_AUTO_TEST_CASE(nested_collections)
                                     "org.apache.cassandra.db.marshal.MapType("
                                     "org.apache.cassandra.db.marshal.Int32Type,org.apache.cassandra.db.marshal.Int32Type)))");
 
-  BOOST_REQUIRE(data_type->type() == CASS_VALUE_TYPE_MAP);
+  BOOST_REQUIRE(data_type->value_type() == CASS_VALUE_TYPE_MAP);
 
   cass::SharedRefPtr<cass::CollectionType> collection
       = static_cast<cass::SharedRefPtr<cass::CollectionType> >(data_type);
 
   BOOST_REQUIRE(collection->types().size() == 2);
 
-  BOOST_CHECK(collection->types()[0]->type() == CASS_VALUE_TYPE_TEXT);
+  BOOST_CHECK(collection->types()[0]->value_type() == CASS_VALUE_TYPE_TEXT);
 
-  BOOST_REQUIRE(collection->types()[1]->type() == CASS_VALUE_TYPE_MAP);
+  BOOST_REQUIRE(collection->types()[1]->value_type() == CASS_VALUE_TYPE_MAP);
   BOOST_CHECK(collection->types()[1]->is_frozen() == true);
 
   cass::SharedRefPtr<cass::CollectionType> nested_collection
       = static_cast<cass::SharedRefPtr<cass::CollectionType> >(collection->types()[1]);
 
   BOOST_REQUIRE(nested_collection->types().size() == 2);
-  BOOST_CHECK(nested_collection->types()[0]->type() == CASS_VALUE_TYPE_INT);
-  BOOST_CHECK(nested_collection->types()[1]->type() == CASS_VALUE_TYPE_INT);
+  BOOST_CHECK(nested_collection->types()[0]->value_type() == CASS_VALUE_TYPE_INT);
+  BOOST_CHECK(nested_collection->types()[1]->value_type() == CASS_VALUE_TYPE_INT);
 }
 
 BOOST_AUTO_TEST_CASE(composite)
@@ -198,8 +198,8 @@ BOOST_AUTO_TEST_CASE(composite)
   BOOST_CHECK(result->is_composite());
 
   BOOST_REQUIRE(result->types().size() == 2);
-  BOOST_CHECK(result->types()[0]->type() == CASS_VALUE_TYPE_ASCII);
-  BOOST_CHECK(result->types()[1]->type() == CASS_VALUE_TYPE_INT);
+  BOOST_CHECK(result->types()[0]->value_type() == CASS_VALUE_TYPE_ASCII);
+  BOOST_CHECK(result->types()[1]->value_type() == CASS_VALUE_TYPE_INT);
 
   BOOST_REQUIRE(result->reversed().size() == 2);
   BOOST_CHECK(result->reversed()[0] == false);
@@ -214,7 +214,7 @@ BOOST_AUTO_TEST_CASE(not_composite)
       = cass::TypeParser::parse_with_composite("org.apache.cassandra.db.marshal.InetAddressType");
 
   BOOST_REQUIRE(result->types().size() == 1);
-  BOOST_CHECK(result->types()[0]->type() == CASS_VALUE_TYPE_INET);
+  BOOST_CHECK(result->types()[0]->value_type() == CASS_VALUE_TYPE_INET);
 
   BOOST_REQUIRE(result->reversed().size() == 1);
   BOOST_CHECK(result->reversed()[0] == false);
@@ -230,8 +230,8 @@ BOOST_AUTO_TEST_CASE(composite_with_reversed)
   BOOST_CHECK(result->is_composite());
 
   BOOST_REQUIRE(result->types().size() == 2);
-  BOOST_CHECK(result->types()[0]->type() == CASS_VALUE_TYPE_ASCII);
-  BOOST_CHECK(result->types()[1]->type() == CASS_VALUE_TYPE_INT);
+  BOOST_CHECK(result->types()[0]->value_type() == CASS_VALUE_TYPE_ASCII);
+  BOOST_CHECK(result->types()[1]->value_type() == CASS_VALUE_TYPE_INT);
 
   BOOST_REQUIRE(result->reversed().size() == 2);
   BOOST_CHECK(result->reversed()[0] == true);
@@ -255,8 +255,8 @@ BOOST_AUTO_TEST_CASE(composite_with_collections)
   BOOST_CHECK(result->is_composite());
 
   BOOST_REQUIRE(result->types().size() == 2);
-  BOOST_CHECK(result->types()[0]->type() == CASS_VALUE_TYPE_INT);
-  BOOST_CHECK(result->types()[1]->type() == CASS_VALUE_TYPE_TEXT);
+  BOOST_CHECK(result->types()[0]->value_type() == CASS_VALUE_TYPE_INT);
+  BOOST_CHECK(result->types()[1]->value_type() == CASS_VALUE_TYPE_TEXT);
 
   BOOST_REQUIRE(result->reversed().size() == 2);
   BOOST_CHECK(result->reversed()[0] == false);
@@ -269,25 +269,25 @@ BOOST_AUTO_TEST_CASE(composite_with_collections)
   i = result->collections().find("ab");
   cass::SharedRefPtr<cass::CollectionType> collection;
   BOOST_REQUIRE(i != result->collections().end());
-  BOOST_REQUIRE(i->second->type() == CASS_VALUE_TYPE_LIST);
+  BOOST_REQUIRE(i->second->value_type() == CASS_VALUE_TYPE_LIST);
   collection = static_cast<cass::SharedRefPtr<cass::CollectionType> >(i->second);
   BOOST_REQUIRE(collection->types().size() == 1);
-  BOOST_CHECK(collection->types()[0]->type() == CASS_VALUE_TYPE_INT);
+  BOOST_CHECK(collection->types()[0]->value_type() == CASS_VALUE_TYPE_INT);
 
   i = result->collections().find("JKLMNO");
   BOOST_REQUIRE(i != result->collections().end());
-  BOOST_CHECK(i->second->type() == CASS_VALUE_TYPE_SET);
+  BOOST_CHECK(i->second->value_type() == CASS_VALUE_TYPE_SET);
   collection = static_cast<cass::SharedRefPtr<cass::CollectionType> >(i->second);
   BOOST_REQUIRE(collection->types().size() == 1);
-  BOOST_CHECK(collection->types()[0]->type() == CASS_VALUE_TYPE_TEXT);
+  BOOST_CHECK(collection->types()[0]->value_type() == CASS_VALUE_TYPE_TEXT);
 
   i = result->collections().find("jklmno");
   BOOST_REQUIRE(i != result->collections().end());
-  BOOST_CHECK(i->second->type() == CASS_VALUE_TYPE_MAP);
+  BOOST_CHECK(i->second->value_type() == CASS_VALUE_TYPE_MAP);
   collection = static_cast<cass::SharedRefPtr<cass::CollectionType> >(i->second);
   BOOST_REQUIRE(collection->types().size() == 2);
-  BOOST_CHECK(collection->types()[0]->type() == CASS_VALUE_TYPE_TEXT);
-  BOOST_CHECK(collection->types()[1]->type() == CASS_VALUE_TYPE_BIGINT);
+  BOOST_CHECK(collection->types()[0]->value_type() == CASS_VALUE_TYPE_TEXT);
+  BOOST_CHECK(collection->types()[1]->value_type() == CASS_VALUE_TYPE_BIGINT);
 }
 
 BOOST_AUTO_TEST_SUITE_END()

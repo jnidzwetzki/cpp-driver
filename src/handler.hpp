@@ -33,6 +33,8 @@ class Connection;
 class Request;
 class ResponseMessage;
 
+typedef std::vector<uv_buf_t> UvBufVec;
+
 struct RequestTimer {
   typedef void (*Callback)(RequestTimer*);
 
@@ -144,7 +146,7 @@ protected:
 
 private:
   RequestTimer timer_;
-  int8_t stream_;
+  int16_t stream_;
   State state_;
 
 private:

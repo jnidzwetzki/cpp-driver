@@ -18,7 +18,7 @@
 
 #include "execute_request.hpp"
 #include "logger.hpp"
-#include "types.hpp"
+#include "external_types.hpp"
 
 extern "C" {
 
@@ -48,7 +48,7 @@ Prepared::Prepared(const ResultResponse* result,
     if (result->column_count() > 0) {
       for (std::vector<std::string>::const_iterator i = key_columns.begin();
            i != key_columns.end(); ++i) {
-        if (result->find_column_indices(StringRef(*i), &indices) > 0) {
+        if (result->metadata()->get_indices(StringRef(*i), &indices) > 0) {
           key_indices_.push_back(indices[0]);
         } else {
           LOG_WARN("Unable to find key column '%s' in prepared query", i->c_str());

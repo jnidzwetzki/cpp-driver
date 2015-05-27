@@ -27,7 +27,7 @@
 namespace cass {
 
 class BufferPiece;
-class OutputValue;
+class Value;
 
 // Done this way so that macros like __LINE__ will expand before
 // being concatenated.

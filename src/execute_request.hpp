@@ -40,6 +40,7 @@ public:
       if (prepared->result()->result_metadata()) {
         set_skip_metadata(true);
       }
+      metadata_ = prepared->result()->metadata();
   }
 
   const std::string& query() const { return prepared_->id(); }
@@ -48,7 +49,7 @@ public:
 private:
   int encode(int version, BufferVec* bufs) const;
   int encode_v1(BufferVec* bufs) const;
-  int encode_v2(BufferVec* bufs) const;
+  int encode(BufferVec* bufs) const;
 
 private:
   SharedRefPtr<const Prepared> prepared_;

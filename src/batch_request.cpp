@@ -17,14 +17,14 @@
 #include "batch_request.hpp"
 
 #include "execute_request.hpp"
+#include "external_types.hpp"
 #include "serialization.hpp"
 #include "statement.hpp"
-#include "types.hpp"
 
 
 extern "C" {
 
-CassBatch* cass_batch_new(CassBatchType type) {
+CassBatch* cass_batch_new(CassSession* session, CassBatchType type) {
   cass::BatchRequest* batch = new cass::BatchRequest(type);
   batch->inc_ref();
   return CassBatch::to(batch);
@@ -50,13 +50,13 @@ CassError cass_batch_add_statement(CassBatch* batch, CassStatement* statement) {
 namespace cass {
 
 int BatchRequest::encode(int version, BufferVec* bufs) const {
-  if (version != 2) {
+  if (version == 2) {
     return ENCODE_ERROR_UNSUPPORTED_PROTOCOL;
   }
-  return encode_v2(bufs);
+  return encode(bufs);
 }
 
-int BatchRequest::encode_v2(BufferVec* bufs) const {
+int BatchRequest::encode(BufferVec* bufs) const {
   size_t length = 0;
 
   {

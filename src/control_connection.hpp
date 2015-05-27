@@ -35,13 +35,13 @@ class Request;
 class Row;
 class Session;
 class Timer;
-class OutputValue;
+class Value;
 
 class ControlConnection : public Connection::Listener {
 public:
   static bool determine_address_for_peer_host(const Address& connected_address,
-                                              const OutputValue* peer_value,
-                                              const OutputValue* rpc_value,
+                                              const Value* peer_value,
+                                              const Value* rpc_value,
                                               Address* output);
 
   enum State {

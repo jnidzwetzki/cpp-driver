@@ -17,8 +17,8 @@
 #ifndef __CASS_ROW_HPP_INCLUDED__
 #define __CASS_ROW_HPP_INCLUDED__
 
-#include "output_value.hpp"
 #include "string_ref.hpp"
+#include "value.hpp"
 
 #include <vector>
 
@@ -36,7 +36,7 @@ public:
 
   OutputValueVec values;
 
-  const OutputValue* get_by_name(const StringRef& name) const;
+  const Value* get_by_name(const StringRef& name) const;
 
   bool get_string_by_name(const StringRef& name, std::string* out) const;
 

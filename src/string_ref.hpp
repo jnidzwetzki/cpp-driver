@@ -114,11 +114,11 @@ public:
     return icompare(ref) == 0;
   }
 
-  bool operator==(const StringRef& ref) {
+  bool operator==(const StringRef& ref) const {
     return equals(ref);
   }
 
-  bool operator!=(const StringRef& ref) {
+  bool operator!=(const StringRef& ref) const {
     return !equals(ref);
   }
 

@@ -30,8 +30,7 @@ cass::SharedRefPtr<cass::ResultMetadata> create_metadata(const char* column_name
 
   for (size_t i = 0; column_names[i] != NULL; ++i) {
     cass::ColumnDefinition def;
-    def.name = const_cast<char*>(column_names[i]);
-    def.name_size = strlen(def.name);
+    def.name = cass::StringRef(column_names[i]);
     def.index = i;
     metadata->insert(def);
   }
@@ -48,7 +47,7 @@ BOOST_AUTO_TEST_CASE(simple)
 
   for (size_t i = 0; column_names[i] != NULL; ++i) {
     cass::HashIndex::IndexVec indices;
-    size_t count = metadata->get_indexes(column_names[i], &indices);
+    size_t count = metadata->get_indices(column_names[i], &indices);
     BOOST_CHECK(count == 1);
     BOOST_CHECK(indices.size() > 0 && indices[0] == i);
   }
@@ -65,20 +64,20 @@ BOOST_AUTO_TEST_CASE(case_sensitive)
     name.push_back('"');
     name.append(column_names[i]);
     name.push_back('"');
-    size_t count = metadata->get_indexes(name.c_str(), &indices);
+    size_t count = metadata->get_indices(name.c_str(), &indices);
     BOOST_CHECK(count == 1);
     BOOST_CHECK(indices.size() > 0 && indices[0] == i);
   }
 
   {
     cass::HashIndex::IndexVec indices;
-    size_t count = metadata->get_indexes("a", &indices);
+    size_t count = metadata->get_indices("a", &indices);
     BOOST_CHECK(count == 2);
   }
 
   {
     cass::HashIndex::IndexVec indices;
-    size_t count = metadata->get_indexes("abc", &indices);
+    size_t count = metadata->get_indices("abc", &indices);
     BOOST_CHECK(count == 7);
   }
 }

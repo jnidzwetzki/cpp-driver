@@ -58,7 +58,7 @@ size_t HashIndex::get(StringRef name, HashIndex::IndexVec* result) const {
   size_t h = fnv1a_hash_lower(name) & index_mask_;
 
   size_t start = h;
-  while (index_[h] != NULL && !iequals(name, StringRef(index_[h]->name, index_[h]->name_size))) {
+  while (index_[h] != NULL && !iequals(name, index_[h]->name)) {
     h = (h + 1) & index_mask_;
     if (h == start) {
       return 0;
@@ -78,7 +78,7 @@ size_t HashIndex::get(StringRef name, HashIndex::IndexVec* result) const {
     }
   } else {
     while (entry != NULL) {
-      if (name.equals(StringRef(entry->name, entry->name_size))) {
+      if (name.equals(entry->name)) {
         result->push_back(entry->index);
       }
       entry = entry->next;
@@ -89,15 +89,14 @@ size_t HashIndex::get(StringRef name, HashIndex::IndexVec* result) const {
 }
 
 void HashIndex::insert(HashIndex::Entry* entry) {
-  StringRef name(entry->name, entry->name_size);
 
-  size_t h = fnv1a_hash_lower(name) & index_mask_;
+  size_t h = fnv1a_hash_lower(entry->name) & index_mask_;
 
   if (index_[h] == NULL) {
     index_[h] = entry;
   } else {
     // Use linear probing to find an open bucket
-    while (index_[h] != NULL && !iequals(name, StringRef(index_[h]->name, index_[h]->name_size))) {
+    while (index_[h] != NULL && !iequals(entry->name, index_[h]->name)) {
       h = (h + 1) & index_mask_;
     }
     if (index_[h] == NULL) {
