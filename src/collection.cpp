@@ -18,6 +18,7 @@
 
 #include "external_types.hpp"
 #include "macros.hpp"
+#include "user_type_value.hpp"
 
 #include <string.h>
 
@@ -35,17 +36,16 @@ void cass_collection_free(CassCollection* collection) {
   delete collection->from();
 }
 
-#define CASS_COLLECTION_APPEND(Name, Params, Value) \
+#define CASS_COLLECTION_APPEND(Name, Params, Value)                           \
  CassError cass_collection_append_##Name(CassCollection* collection Params) { \
-   collection->append(Value); \
-   return CASS_OK; \
- } \
+   return collection->append(Value);                                          \
+ }
 
 CASS_COLLECTION_APPEND(int32, ONE_PARAM_(cass_int32_t value), value)
 CASS_COLLECTION_APPEND(int64, ONE_PARAM_(cass_int64_t value), value)
 CASS_COLLECTION_APPEND(float, ONE_PARAM_(cass_float_t value), value)
 CASS_COLLECTION_APPEND(double, ONE_PARAM_(cass_double_t value), value)
-CASS_COLLECTION_APPEND(bool, ONE_PARAM_(cass_bool_t value), value == cass_true)
+CASS_COLLECTION_APPEND(bool, ONE_PARAM_(cass_bool_t value), value)
 CASS_COLLECTION_APPEND(uuid, ONE_PARAM_(CassUuid value), value)
 CASS_COLLECTION_APPEND(inet, ONE_PARAM_(CassInet value), value)
 CASS_COLLECTION_APPEND(bytes,
@@ -71,3 +71,118 @@ CassError cass_collection_append_string_n(CassCollection* collection,
 }
 
 } // extern "C"
+
+namespace cass {
+
+CassError Collection::append(const Collection* value) {
+  CASS_COLLECTION_CHECK_TYPE(value);
+  items_.push_back(value->encode());
+  return CASS_OK;
+}
+
+CassError Collection::append(const UserTypeValue* value) {
+  CASS_COLLECTION_CHECK_TYPE(value);
+  items_.push_back(value->encode());
+  return CASS_OK;
+}
+
+size_t Collection::get_items_size() const {
+  if (protocol_version_ >= 3 || type_ == CASS_COLLECTION_TYPE_TUPLE) {
+    return get_items_size(sizeof(int32_t));
+  } else {
+    return get_items_size(sizeof(uint16_t));
+  }
+}
+
+void Collection::encode_items(char* buf) const {
+  if (protocol_version_ >= 3 || type_ == CASS_COLLECTION_TYPE_TUPLE) {
+    encode_items_int32(buf);
+  } else {
+    encode_items_uint16(buf);
+  }
+}
+
+Buffer Collection::encode() const {
+  if (type_ == CASS_COLLECTION_TYPE_TUPLE) {
+    Buffer buf(get_items_size(sizeof(int32_t)));
+    encode_items_int32(buf.data());
+    return buf;
+  } else if (protocol_version_ >= 3) {
+    Buffer buf(sizeof(int32_t) + get_items_size(sizeof(int32_t)));
+    size_t pos = buf.encode_int32(0, get_count());
+    encode_items_int32(buf.data() + pos);
+    return buf;
+  } else {
+    Buffer buf(sizeof(int16_t) + get_items_size(sizeof(int16_t)));
+    size_t pos = buf.encode_uint16(0, get_count());
+    encode_items_uint16(buf.data() + pos);
+    return buf;
+  }
+}
+
+Buffer Collection::encode_with_length() const {
+  if (type_ == CASS_COLLECTION_TYPE_TUPLE) {
+    size_t internal_size = get_items_size(sizeof(int32_t));
+
+    Buffer buf(sizeof(int32_t) + internal_size);
+    size_t pos = buf.encode_int32(0, internal_size);
+
+    encode_items_int32(buf.data() + pos);
+
+    return buf;
+  } else {
+    size_t internal_size;
+
+    if (protocol_version_ >= 3) {
+      internal_size = sizeof(int32_t) + get_items_size(sizeof(int32_t));
+    } else {
+      internal_size = sizeof(uint16_t) + get_items_size(sizeof(uint16_t));
+    }
+
+    Buffer buf(sizeof(int32_t) + internal_size);
+
+    size_t pos = buf.encode_int32(0, internal_size);
+
+    if (protocol_version_ >= 3) {
+      pos = buf.encode_int32(pos, get_count());
+      encode_items_int32(buf.data() + pos);
+    } else {
+      pos = buf.encode_uint16(pos, get_count());
+      encode_items_uint16(buf.data() + pos);
+    }
+
+    return buf;
+  }
+}
+
+size_t Collection::get_items_size(size_t num_bytes_for_size) const {
+  size_t size = 0;
+  for (BufferVec::const_iterator i = items_.begin(),
+       end = items_.end(); i != end; ++i) {
+    size += num_bytes_for_size;
+    size += i->size();
+  }
+  return size;
+}
+
+void Collection::encode_items_int32(char* buf) const {
+  for (BufferVec::const_iterator i = items_.begin(),
+       end = items_.end(); i != end; ++i) {
+    encode_int32(buf, i->size());
+    buf += sizeof(int32_t);
+    memcpy(buf, i->data(), i->size());
+    buf += i->size();
+  }
+}
+
+void Collection::encode_items_uint16(char* buf) const {
+  for (BufferVec::const_iterator i = items_.begin(),
+       end = items_.end(); i != end; ++i) {
+    encode_uint16(buf, i->size());
+    buf += sizeof(uint16_t);
+    memcpy(buf, i->data(), i->size());
+    buf += i->size();
+  }
+}
+
+}  // namespace cass

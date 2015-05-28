@@ -378,15 +378,17 @@ void SchemaMetadata::add_json_list_field(int version, const Row* row, const std:
     collection.append(cass::CassString(i->GetString(), i->GetStringLength()));
   }
 
-  Buffer encoded(collection.encode_items());
+  size_t encoded_size = collection.get_items_size();
+  SharedRefPtr<RefBuffer> encoded(RefBuffer::create(encoded_size));
 
-  Value map(version,
-            SharedRefPtr<DataType>(
-              new CollectionType(CASS_VALUE_TYPE_TEXT, CASS_VALUE_TYPE_TEXT)),
-            d.Size(),
-            encoded.data(),
-            encoded.size());
-  fields_[name] = SchemaMetadataField(name, map, encoded.buffer());
+  collection.encode_items(encoded->data());
+
+  Value list(version,
+             collection.data_type(),
+             d.Size(),
+             encoded->data(),
+             encoded_size);
+  fields_[name] = SchemaMetadataField(name, list, encoded);
 }
 
 void SchemaMetadata::add_json_map_field(int version, const Row* row, const std::string& name) {
@@ -422,15 +424,17 @@ void SchemaMetadata::add_json_map_field(int version, const Row* row, const std::
     collection.append(CassString(i->value.GetString(), i->value.GetStringLength()));
   }
 
-  Buffer encoded(collection.encode_items());
+  size_t encoded_size = collection.get_items_size();
+  SharedRefPtr<RefBuffer> encoded(RefBuffer::create(encoded_size));
+
+  collection.encode_items(encoded->data());
 
   Value map(version,
-            SharedRefPtr<DataType>(
-              new CollectionType(CASS_VALUE_TYPE_TEXT, CASS_VALUE_TYPE_TEXT)),
+            collection.data_type(),
             d.MemberCount(),
-            encoded.data(),
-            encoded.size());
-  fields_[name] = SchemaMetadataField(name, map, encoded.buffer());
+            encoded->data(),
+            encoded_size);
+  fields_[name] = SchemaMetadataField(name, map, encoded);
 }
 
 const SchemaMetadata* KeyspaceMetadata::get_entry(const std::string& name) const {

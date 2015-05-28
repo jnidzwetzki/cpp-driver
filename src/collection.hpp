@@ -24,31 +24,43 @@
 #include "ref_counted.hpp"
 #include "types.hpp"
 
+
+#define CASS_COLLECTION_CHECK_TYPE(Value) do { \
+  CassError rc = check(Value);                 \
+  if (rc != CASS_OK) return rc;                \
+} while(0)
+
 namespace cass {
+
+class UserTypeValue;
 
 class Collection {
 public:
   Collection(int protocol_version,
              CassCollectionType type,
              size_t item_count)
-    : type_(type)
-    , protocol_version_(protocol_version) {
+    : protocol_version_(protocol_version)
+    , type_(type)
+    , data_type_(new CollectionType(static_cast<CassValueType>(type))) {
     items_.reserve(item_count);
   }
 
   CassCollectionType type() const { return type_; }
+  const SharedRefPtr<CollectionType>& data_type() const { return data_type_; }
   const BufferVec& items() const { return items_; }
 
-#define APPEND_TYPE(DeclType)           \
-  void append(const DeclType value) {   \
+#define APPEND_TYPE(Type)                  \
+  CassError append(const Type value) {     \
+    CASS_COLLECTION_CHECK_TYPE(value);     \
     items_.push_back(cass::encode(value)); \
+    return CASS_OK;                        \
   }
 
   APPEND_TYPE(cass_int32_t)
   APPEND_TYPE(cass_int64_t)
   APPEND_TYPE(cass_float_t)
   APPEND_TYPE(cass_double_t)
-  APPEND_TYPE(bool)
+  APPEND_TYPE(cass_bool_t)
   APPEND_TYPE(CassString)
   APPEND_TYPE(CassBytes)
   APPEND_TYPE(CassUuid)
@@ -57,63 +69,62 @@ public:
 
 #undef APPEND_TYPE
 
-  Buffer encode_items() const {
-    Buffer buf(get_values_size());
-    encode_items(0, &buf);
-    return buf;
-  }
+  CassError append(const Collection* value);
+  CassError append(const UserTypeValue* value);
 
-  Buffer encode_with_length() const {
-    size_t value_size = get_size() + get_values_size();
+  size_t get_items_size() const;
+  void encode_items(char* buf) const;
 
-    Buffer buf(sizeof(int32_t) + value_size);
+  Buffer encode() const;
+  Buffer encode_with_length() const;
 
-    size_t pos = buf.encode_int32(0, value_size);
-    pos = encode_size(pos, &buf, get_count());
-    encode_items(pos, &buf);
-
-    return buf;
+  void clear() {
+    items_.clear();
+    data_type_->types().clear();
   }
 
 private:
+  template <class T>
+  CassError check(const T value) {
+    CreateDataType<T> create_data_type;
+    if (type_ == CASS_COLLECTION_TYPE_TUPLE) {
+      data_type_->types().push_back(create_data_type(value));
+    } else {
+      IsValidDataType<T> is_valid_type;
+      if (type_ == CASS_COLLECTION_TYPE_MAP) {
+        if (data_type_->types().size() == 2) {
+          if (!is_valid_type(value, data_type_->types()[items_.size() % 2])) {
+            return CASS_ERROR_LIB_INVALID_VALUE_TYPE;
+          }
+        } else {
+          data_type_->types().push_back(create_data_type(value));
+        }
+      } else {
+        if (data_type_->types().size() == 1) {
+          if (!is_valid_type(value, data_type_->types()[0])) {
+            return CASS_ERROR_LIB_INVALID_VALUE_TYPE;
+          }
+        } else {
+          data_type_->types().push_back(create_data_type(value));
+        }
+      }
+    }
+    return CASS_OK;
+  }
+
   int32_t get_count() const {
     return ((type_ == CASS_COLLECTION_TYPE_MAP) ? items_.size() / 2 : items_.size());
   }
 
-  size_t get_size() const {
-    return (protocol_version_ >= 3) ? sizeof(int32_t) : sizeof(uint16_t);
-  }
+  size_t get_items_size(size_t num_bytes_for_size) const;
 
-  size_t encode_size(size_t pos, Buffer* buf, int32_t size) const {
-    if (protocol_version_ >= 3) {
-      pos = buf->encode_int32(pos, size);
-    } else {
-      pos = buf->encode_uint16(pos, size);
-    }
-    return pos;
-  }
-
-  size_t get_values_size() const {
-    size_t size = 0;
-    for (BufferVec::const_iterator i = items_.begin(),
-         end = items_.end(); i != end; ++i) {
-      size += get_size();
-      size += i->size();
-    }
-    return size;
-  }
-
-  void encode_items(size_t pos, Buffer* buf) const {
-    for (BufferVec::const_iterator i = items_.begin(),
-         end = items_.end(); i != end; ++i) {
-      pos = encode_size(pos, buf, i->size());
-      pos = buf->copy(pos, i->data(), i->size());
-    }
-  }
+  void encode_items_int32(char* buf) const;
+  void encode_items_uint16(char* buf) const;
 
 private:
-  CassCollectionType type_;
   int protocol_version_;
+  CassCollectionType type_;
+  SharedRefPtr<CollectionType> data_type_;
   BufferVec items_;
 };
 

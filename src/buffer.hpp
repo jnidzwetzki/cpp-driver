@@ -111,10 +111,6 @@ public:
     return offset + sizeof(double);
   }
 
-  size_t encode_bool(size_t offset, bool value) {
-    return encode_byte(offset, value);
-  }
-
   size_t encode_long_string(size_t offset, const char* value, int32_t size) {
     size_t pos = encode_int32(offset, size);
     return copy(pos, value, size);
@@ -181,17 +177,6 @@ public:
   }
 
   size_t size() const { return size_; }
-
-  SharedRefPtr<RefBuffer> buffer() {
-    if (size_ > FIXED_BUFFER_SIZE) {
-      return SharedRefPtr<RefBuffer>(data_.buffer);
-    } else if (size_ > 0){
-      SharedRefPtr<RefBuffer> buf(RefBuffer::create(size_));
-      memcpy(buf->data(), data_.fixed, size_);
-      return buf;
-    }
-    return SharedRefPtr<RefBuffer>();
-  }
 
 private:
   // Enough space to avoid extra allocations for most of the basic types

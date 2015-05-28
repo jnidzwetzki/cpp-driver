@@ -133,7 +133,7 @@ private:
     if (collection_type == CASS_VALUE_TYPE_MAP) {
       types.push_back(decode());
     }
-    return SharedRefPtr<DataType>(new CollectionType(collection_type, types, false));
+    return SharedRefPtr<DataType>(new CollectionType(collection_type, types));
   }
 
   SharedRefPtr<DataType> decode_user_type() {
@@ -165,7 +165,7 @@ private:
     for (uint16_t i = 0; i < n; ++i) {
       types.push_back(decode());
     }
-    return SharedRefPtr<DataType>(new TupleType(types));
+    return CollectionType::tuple(types);
   }
 
 private:

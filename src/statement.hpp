@@ -18,7 +18,6 @@
 #define __CASS_STATEMENT_HPP_INCLUDED__
 
 #include "buffer.hpp"
-#include "collection.hpp"
 #include "constants.hpp"
 #include "encode.hpp"
 #include "macros.hpp"
@@ -26,12 +25,19 @@
 #include "result_metadata.hpp"
 #include "result_response.hpp"
 #include "types.hpp"
-#include "user_type_value.hpp"
 
 #include <vector>
 #include <string>
 
+#define CASS_STATEMENT_CHECK_INDEX_AND_TYPE(Index, Value) do { \
+  CassError rc = check(Index, Value);                          \
+  if (rc != CASS_OK) return rc;                                \
+} while(0)
+
 namespace cass {
+
+class Collection;
+class UserTypeValue;
 
 class Statement : public RoutableRequest {
 public:
@@ -87,66 +93,39 @@ public:
   virtual bool get_routing_key(std::string* routing_key) const;
 
 
-#define CHECK_INDEX_AND_TYPE(Index, Value) do { \
-  if (Index >= values_count()) {                \
-    return CASS_ERROR_LIB_INDEX_OUT_OF_BOUNDS;  \
-  }                                             \
-  CassError rc = validate_type(Index, Value);   \
-  if (rc != CASS_OK) return rc;                 \
-} while(0)
-
-#define BIND_TYPE(DeclType)                            \
-  CassError bind(size_t index, const DeclType value) { \
-    CHECK_INDEX_AND_TYPE(index, value);                \
+#define BIND_TYPE(Type)                                \
+  CassError bind(size_t index, const Type value) {     \
+    CASS_STATEMENT_CHECK_INDEX_AND_TYPE(index, value); \
     values_[index]  = encode_with_length(value);       \
     return CASS_OK;                                    \
   }
 
+  BIND_TYPE(CassNull)
   BIND_TYPE(cass_int32_t)
   BIND_TYPE(cass_int64_t)
   BIND_TYPE(cass_float_t)
   BIND_TYPE(cass_double_t)
-  BIND_TYPE(bool)
+  BIND_TYPE(cass_bool_t)
   BIND_TYPE(CassString)
   BIND_TYPE(CassBytes)
   BIND_TYPE(CassUuid)
   BIND_TYPE(CassInet)
   BIND_TYPE(CassDecimal)
-  BIND_TYPE(CassNull)
 
 #undef BIND_TYPE
 
-  CassError bind(size_t index, CassCustom custom) {
-    CHECK_INDEX_AND_TYPE(index, custom);
-    Buffer value(custom.output_size);
-    values_[index] = value;
-    *(custom.output) = reinterpret_cast<uint8_t*>(value.data());
-    return CASS_OK;
-  }
-
-  CassError bind(size_t index, const Collection* value) {
-    CHECK_INDEX_AND_TYPE(index, value);
-    if (value->type() == CASS_COLLECTION_TYPE_MAP &&
-        value->items().size() % 2 != 0) {
-      return CASS_ERROR_LIB_INVALID_ITEM_COUNT;
-    }
-    values_[index] = value->encode_with_length();
-    return CASS_OK;
-  }
-
-  CassError bind(size_t index, const UserTypeValue* value) {
-    CHECK_INDEX_AND_TYPE(index, value);
-    values_[index] = value->encode_with_length();
-    return CASS_OK;
-  }
-
-#undef CHECK_INDEX_AND_TYPE
+  CassError bind(size_t index, CassCustom custom);
+  CassError bind(size_t index, const Collection* value);
+  CassError bind(size_t index, const UserTypeValue* value);
 
   int32_t encode_values(BufferVec*  bufs) const;
 
 private:
   template <class T>
-  CassError validate_type(size_t index, const T value) const {
+  CassError check(size_t index, const T value) const {
+    if (index >= values_count()) {
+      return CASS_ERROR_LIB_INDEX_OUT_OF_BOUNDS;
+    }
     // This can only validate statements with metadata
     if (!metadata_) {
       return CASS_OK;

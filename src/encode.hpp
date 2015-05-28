@@ -42,24 +42,24 @@ inline Buffer encode_with_length(int64_t value) {
   return buf;
 }
 
-inline Buffer encode_with_length(float value) {
+inline Buffer encode_with_length(cass_float_t value) {
   Buffer buf(sizeof(int32_t) + sizeof(float));
   size_t pos = buf.encode_int32(0, sizeof(float));
   buf.encode_float(pos, value);
   return buf;
 }
 
-inline Buffer encode_with_length(double value) {
+inline Buffer encode_with_length(cass_double_t value) {
   Buffer buf(sizeof(int32_t) + sizeof(double));
   size_t pos = buf.encode_int32(0, sizeof(double));
   buf.encode_double(pos, value);
   return buf;
 }
 
-inline Buffer encode_with_length(bool value) {
+inline Buffer encode_with_length(cass_bool_t value) {
   Buffer buf(sizeof(int32_t) + 1);
   size_t pos = buf.encode_int32(0, 1);
-  buf.encode_bool(pos, value);
+  buf.encode_byte(pos, static_cast<int8_t>(value));
   return buf;
 }
 
@@ -111,21 +111,21 @@ inline Buffer encode(int64_t value) {
   return buf;
 }
 
-inline Buffer encode(float value) {
+inline Buffer encode(cass_float_t value) {
   Buffer buf(sizeof(float));
   buf.encode_float(0, value);
   return buf;
 }
 
-inline Buffer encode(double value) {
+inline Buffer encode(cass_double_t value) {
   Buffer buf(sizeof(double));
   buf.encode_double(0, value);
   return buf;
 }
 
-inline Buffer encode(bool value) {
+inline Buffer encode(cass_bool_t value) {
   Buffer buf(1);
-  buf.encode_bool(0, value);
+  buf.encode_byte(0, static_cast<int8_t>(value));
   return buf;
 }
 

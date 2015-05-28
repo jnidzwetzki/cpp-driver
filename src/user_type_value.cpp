@@ -16,6 +16,7 @@
 
 #include "user_type_value.hpp"
 
+#include "collection.hpp"
 #include "macros.hpp"
 #include "external_types.hpp"
 
@@ -69,26 +70,27 @@ CassUserType* cass_user_type_new_n(CassSession* session,
 }
 
 
-#define CASS_USER_TYPE_SET(Name, Params, Value) \
-  CassError cass_user_type_set_##Name(CassUserType* user_type,\
-                                      size_t index Params) { \
-    return user_type->set(index, Value); \
-  } \
-  CassError cass_user_type_set_##Name##_by_name(CassUserType* user_type, \
-                                                const char* name Params) { \
-    return cass::bind_by_name(user_type, cass::StringRef(name), Value); \
-  } \
-  CassError cass_user_type_set_##Name##_by_name_n(CassUserType* user_type, \
-                                                  const char* name, \
-                                                  size_t name_length Params) { \
+#define CASS_USER_TYPE_SET(Name, Params, Value)                                      \
+  CassError cass_user_type_set_##Name(CassUserType* user_type,                       \
+                                      size_t index Params) {                         \
+    return user_type->set(index, Value);                                             \
+  }                                                                                  \
+  CassError cass_user_type_set_##Name##_by_name(CassUserType* user_type,             \
+                                                const char* name Params) {           \
+    return cass::bind_by_name(user_type, cass::StringRef(name), Value);              \
+  }                                                                                  \
+  CassError cass_user_type_set_##Name##_by_name_n(CassUserType* user_type,           \
+                                                  const char* name,                  \
+                                                  size_t name_length Params) {       \
     return cass::bind_by_name(user_type, cass::StringRef(name, name_length), Value); \
   }
 
+CASS_USER_TYPE_SET(null, , cass::CassNull())
 CASS_USER_TYPE_SET(int32, ONE_PARAM_(cass_int32_t value), value)
 CASS_USER_TYPE_SET(int64, ONE_PARAM_(cass_int64_t value), value)
 CASS_USER_TYPE_SET(float, ONE_PARAM_(cass_float_t value), value)
 CASS_USER_TYPE_SET(double, ONE_PARAM_(cass_double_t value), value)
-CASS_USER_TYPE_SET(bool, ONE_PARAM_(cass_bool_t value), value == cass_true)
+CASS_USER_TYPE_SET(bool, ONE_PARAM_(cass_bool_t value), value)
 CASS_USER_TYPE_SET(inet, ONE_PARAM_(CassInet value), value)
 CASS_USER_TYPE_SET(uuid, ONE_PARAM_(CassUuid value), value)
 CASS_USER_TYPE_SET(collection, ONE_PARAM_(const CassCollection* value), value)
@@ -138,4 +140,65 @@ void cass_user_type_free(CassUserType* user_type) {
 }
 
 } // extern "C"
+
+namespace cass {
+
+CassError UserTypeValue::set(size_t index, const Collection* value) {
+  CASS_USER_TYPE_CHECK_INDEX_AND_TYPE(index, value);
+  if (value->type() == CASS_COLLECTION_TYPE_MAP &&
+      value->items().size() % 2 != 0) {
+    return CASS_ERROR_LIB_INVALID_ITEM_COUNT;
+  }
+  items_[index] = value->encode_with_length();
+  return CASS_OK;
+}
+
+CassError UserTypeValue::set(size_t index, const UserTypeValue* value) {
+  CASS_USER_TYPE_CHECK_INDEX_AND_TYPE(index, value);
+  items_[index] = value->encode_with_length();
+  return CASS_OK;
+}
+
+Buffer UserTypeValue::encode() const {
+  Buffer buf(get_items_size());
+  encode_items(0, &buf);
+  return buf;
+}
+
+Buffer UserTypeValue::encode_with_length() const {
+  size_t items_size = get_items_size();
+
+  Buffer buf(sizeof(int32_t) + items_size);
+
+  size_t pos = buf.encode_int32(0, items_size);
+  encode_items(pos, &buf);
+
+  return buf;
+}
+
+size_t UserTypeValue::get_items_size() const {
+  size_t size = 0;
+  for (BufferVec::const_iterator i = items_.begin(),
+       end = items_.end(); i != end; ++i) {
+    if (i->size() > 0) {
+      size += i->size();
+    } else {
+      size += sizeof(int32_t); // null
+    }
+  }
+  return size;
+}
+
+void UserTypeValue::encode_items(size_t pos, Buffer* buf) const {
+  for (BufferVec::const_iterator i = items_.begin(),
+       end = items_.end(); i != end; ++i) {
+    if (i->size() > 0) {
+      pos = buf->copy(pos, i->data(), i->size());
+    } else {
+      pos = buf->encode_int32(pos, -1); // null
+    }
+  }
+}
+
+} // namespace cass
 

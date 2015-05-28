@@ -24,18 +24,20 @@ namespace cass {
 
 bool cass::IsValidDataType<const Collection*>::operator()(const Collection* value,
                                                           const SharedRefPtr<DataType>& data_type) const {
-  int value_type = data_type->value_type();
-  return value_type == CASS_VALUE_TYPE_LIST ||
-      value_type == CASS_VALUE_TYPE_SET ||
-      value_type == CASS_VALUE_TYPE_MAP;
+  return value->data_type()->equals(data_type, false);
+}
+
+SharedRefPtr<DataType> cass::CreateDataType<const Collection*>::operator()(const Collection* value) const {
+  return value->data_type();
 }
 
 bool cass::IsValidDataType<const UserTypeValue*>::operator()(const UserTypeValue* value,
                                                              const SharedRefPtr<DataType>& data_type) const {
-  if (data_type->value_type() != CASS_VALUE_TYPE_UDT) {
-    return false;
-  }
-  return value->user_type()->equals(data_type);
+  return value->user_type()->equals(data_type, true);
+}
+
+SharedRefPtr<DataType> cass::CreateDataType<const UserTypeValue*>::operator()(const UserTypeValue* value) const {
+  return value->user_type();
 }
 
 } // namespace cass

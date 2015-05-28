@@ -30,21 +30,17 @@ BOOST_AUTO_TEST_CASE(simple)
 
   data_type = cass::TypeParser::parse_one("org.apache.cassandra.db.marshal.InetAddressType");
   BOOST_CHECK(data_type->value_type() == CASS_VALUE_TYPE_INET);
-  BOOST_CHECK(data_type->is_frozen() == false);
 
   data_type = cass::TypeParser::parse_one("org.apache.cassandra.db.marshal.ReversedType(org.apache.cassandra.db.marshal.UTF8Type)");
   BOOST_CHECK(data_type->value_type() == CASS_VALUE_TYPE_TEXT);
-  BOOST_CHECK(data_type->is_frozen() == false);
 
   data_type = cass::TypeParser::parse_one("org.apache.cassandra.db.marshal.ListType(org.apache.cassandra.db.marshal.UTF8Type)");
   BOOST_REQUIRE(data_type->value_type() == CASS_VALUE_TYPE_LIST);
-  BOOST_CHECK(data_type->is_frozen() == false);
 
   cass::SharedRefPtr<cass::CollectionType> collection
       = static_cast<cass::SharedRefPtr<cass::CollectionType> >(data_type);
   BOOST_REQUIRE(collection->types().size() == 1);
   BOOST_CHECK(collection->types()[0]->value_type() == CASS_VALUE_TYPE_TEXT);
-  BOOST_CHECK(collection->types()[0]->is_frozen() == false);
 }
 
 BOOST_AUTO_TEST_CASE(invalid)
@@ -150,7 +146,7 @@ BOOST_AUTO_TEST_CASE(tuple)
 
   BOOST_REQUIRE(data_type->value_type() == CASS_VALUE_TYPE_TUPLE);
 
-  cass::SharedRefPtr<cass::TupleType> tuple = static_cast<cass::SharedRefPtr<cass::TupleType> >(data_type);
+  cass::SharedRefPtr<cass::CollectionType> tuple = static_cast<cass::SharedRefPtr<cass::CollectionType> >(data_type);
 
   BOOST_REQUIRE(tuple->types().size() == 3);
 
@@ -178,7 +174,6 @@ BOOST_AUTO_TEST_CASE(nested_collections)
   BOOST_CHECK(collection->types()[0]->value_type() == CASS_VALUE_TYPE_TEXT);
 
   BOOST_REQUIRE(collection->types()[1]->value_type() == CASS_VALUE_TYPE_MAP);
-  BOOST_CHECK(collection->types()[1]->is_frozen() == true);
 
   cass::SharedRefPtr<cass::CollectionType> nested_collection
       = static_cast<cass::SharedRefPtr<cass::CollectionType> >(collection->types()[1]);

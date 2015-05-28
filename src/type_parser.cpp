@@ -142,7 +142,7 @@ SharedRefPtr<DataType> TypeParser::parse_one(const std::string& type) {
     if (!element_type) {
       return SharedRefPtr<DataType>();
     }
-    return CollectionType::list(element_type, frozen);
+    return CollectionType::list(element_type);
   } else if(starts_with(next, SET_TYPE)) {
     TypeParamsVec params;
     if (!parser.get_type_params(&params) || params.empty()) {
@@ -152,7 +152,7 @@ SharedRefPtr<DataType> TypeParser::parse_one(const std::string& type) {
     if (!element_type) {
       return SharedRefPtr<DataType>();
     }
-    return CollectionType::set(element_type, frozen);
+    return CollectionType::set(element_type);
   } else if(starts_with(next, MAP_TYPE)) {
     TypeParamsVec params;
     if (!parser.get_type_params(&params) || params.size() < 2) {
@@ -163,7 +163,7 @@ SharedRefPtr<DataType> TypeParser::parse_one(const std::string& type) {
     if (!key_type || !value_type) {
       return SharedRefPtr<DataType>();
     }
-    return CollectionType::map(key_type, value_type, frozen);
+    return CollectionType::map(key_type, value_type);
   }
 
   if (frozen) {
@@ -231,7 +231,7 @@ SharedRefPtr<DataType> TypeParser::parse_one(const std::string& type) {
       types.push_back(data_type);
     }
 
-    return SharedRefPtr<DataType>(new TupleType(types));
+    return CollectionType::tuple(types);
   }
 
   CassValueType t = type_map_[next];

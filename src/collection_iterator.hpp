@@ -24,11 +24,23 @@
 
 namespace cass {
 
-class CollectionIterator : public Iterator {
+class CollectionIteratorBase : public Iterator {
+public:
+  CollectionIteratorBase()
+    : Iterator(CASS_ITERATOR_TYPE_COLLECTION) { }
+
+  const Value* value() const {
+    return &value_;
+  }
+
+protected:
+  Value value_;
+};
+
+class CollectionIterator : public CollectionIteratorBase {
 public:
   CollectionIterator(const Value* collection)
-      : Iterator(CASS_ITERATOR_TYPE_COLLECTION)
-      , collection_(collection)
+      : collection_(collection)
       , position_(collection->data())
       , index_(-1)
       , count_(collection_->value_type() == CASS_VALUE_TYPE_MAP
@@ -36,11 +48,6 @@ public:
                    : collection->count()) {}
 
   virtual bool next();
-
-  const Value* value() const {
-    assert(index_ >= 0 && index_ < count_);
-    return &value_;
-  }
 
 private:
   char* decode_value(char* position);
@@ -51,8 +58,30 @@ private:
   char* position_;
   int32_t index_;
   const int32_t count_;
+};
 
-  Value value_;
+class TupleIterator : public CollectionIteratorBase {
+public:
+  TupleIterator(const Value* tuple)
+      : tuple_(tuple)
+      , position_(tuple->data()) {
+    SharedRefPtr<CollectionType> collection_type(tuple->data_type());
+    next_ = collection_type->types().begin();
+    end_ = collection_type->types().end();
+  }
+
+  virtual bool next();
+
+private:
+  char* decode_value(char* position);
+
+private:
+  const Value* tuple_;
+
+  char* position_;
+  DataTypeVec::const_iterator next_;
+  DataTypeVec::const_iterator current_;
+  DataTypeVec::const_iterator end_;
 };
 
 } // namespace cass

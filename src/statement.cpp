@@ -16,6 +16,7 @@
 
 #include "statement.hpp"
 
+#include "collection.hpp"
 #include "execute_request.hpp"
 #include "external_types.hpp"
 #include "macros.hpp"
@@ -23,6 +24,7 @@
 #include "query_request.hpp"
 #include "scoped_ptr.hpp"
 #include "string_ref.hpp"
+#include "user_type_value.hpp"
 
 #include <uv.h>
 
@@ -122,18 +124,18 @@ CassError cass_statement_set_paging_state(CassStatement* statement,
   return CASS_OK;
 }
 
-#define CASS_STATEMENT_BIND(Name, Params, Value) \
-  CassError cass_statement_bind_##Name(CassStatement* statement, \
-                                      size_t index Params) { \
-    return statement->bind(index, Value); \
-  } \
-  CassError cass_statement_bind_##Name##_by_name(CassStatement* statement, \
-                                                const char* name Params) { \
-    return cass::bind_by_name(statement, cass::StringRef(name), Value); \
-  } \
-  CassError cass_statement_bind_##Name##_by_name_n(CassStatement* statement, \
-                                                   const char* name, \
-                                                   size_t name_length Params) { \
+#define CASS_STATEMENT_BIND(Name, Params, Value)                                     \
+  CassError cass_statement_bind_##Name(CassStatement* statement,                     \
+                                      size_t index Params) {                         \
+    return statement->bind(index, Value);                                            \
+  }                                                                                  \
+  CassError cass_statement_bind_##Name##_by_name(CassStatement* statement,           \
+                                                const char* name Params) {           \
+    return cass::bind_by_name(statement, cass::StringRef(name), Value);              \
+  }                                                                                  \
+  CassError cass_statement_bind_##Name##_by_name_n(CassStatement* statement,         \
+                                                   const char* name,                 \
+                                                   size_t name_length Params) {      \
     return cass::bind_by_name(statement, cass::StringRef(name, name_length), Value); \
   }
 
@@ -142,7 +144,7 @@ CASS_STATEMENT_BIND(int32, ONE_PARAM_(cass_int32_t value), value)
 CASS_STATEMENT_BIND(int64, ONE_PARAM_(cass_int64_t) value, value)
 CASS_STATEMENT_BIND(float, ONE_PARAM_(cass_float_t value), value)
 CASS_STATEMENT_BIND(double, ONE_PARAM_(cass_double_t value), value)
-CASS_STATEMENT_BIND(bool, ONE_PARAM_(cass_bool_t value), value == cass_true)
+CASS_STATEMENT_BIND(bool, ONE_PARAM_(cass_bool_t value), value)
 CASS_STATEMENT_BIND(uuid, ONE_PARAM_(CassUuid value), value)
 CASS_STATEMENT_BIND(inet, ONE_PARAM_(CassInet value), value)
 CASS_STATEMENT_BIND(collection, ONE_PARAM_(const CassCollection* value), value->from())
@@ -196,8 +198,13 @@ int32_t Statement::encode_values(BufferVec* bufs) const {
   int32_t values_size = 0;
   for (BufferVec::const_iterator i = values_.begin(), end = values_.end();
        i != end; ++i) {
-    bufs->push_back(*i);
-    values_size += bufs->back().size();
+    if (i->size() > 0) {
+      bufs->push_back(*i);
+      values_size += bufs->back().size();
+    } else  {
+      bufs->push_back(encode_with_length(CassNull()));
+      values_size += sizeof(int32_t);
+    }
   }
   return values_size;
 }
@@ -235,6 +242,30 @@ bool Statement::get_routing_key(std::string* routing_key)  const {
   }
 
   return true;
+}
+
+CassError Statement::bind(size_t index, CassCustom custom) {
+  CASS_STATEMENT_CHECK_INDEX_AND_TYPE(index, custom);
+  Buffer value(custom.output_size);
+  values_[index] = value;
+  *(custom.output) = reinterpret_cast<uint8_t*>(value.data());
+  return CASS_OK;
+}
+
+CassError Statement::bind(size_t index, const Collection* value) {
+  CASS_STATEMENT_CHECK_INDEX_AND_TYPE(index, value);
+  if (value->type() == CASS_COLLECTION_TYPE_MAP &&
+      value->items().size() % 2 != 0) {
+    return CASS_ERROR_LIB_INVALID_ITEM_COUNT;
+  }
+  values_[index] = value->encode_with_length();
+  return CASS_OK;
+}
+
+CassError Statement::bind(size_t index, const UserTypeValue* value) {
+  CASS_STATEMENT_CHECK_INDEX_AND_TYPE(index, value);
+  values_[index] = value->encode_with_length();
+  return CASS_OK;
 }
 
 } // namespace  cass
