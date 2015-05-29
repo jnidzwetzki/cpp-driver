@@ -50,7 +50,7 @@ CassError cass_batch_add_statement(CassBatch* batch, CassStatement* statement) {
 namespace cass {
 
 int BatchRequest::encode(int version, BufferVec* bufs) const {
-  if (version == 2) {
+  if (version == 1) {
     return ENCODE_ERROR_UNSUPPORTED_PROTOCOL;
   }
   return encode(bufs);
@@ -103,9 +103,9 @@ int BatchRequest::encode(BufferVec* bufs) const {
                               statement->query().size());
     }
 
-    buf.encode_uint16(pos, statement->values_count());
-    if (statement->values_count() > 0) {
-      length += statement->encode_values(bufs);
+    buf.encode_uint16(pos, statement->buffers_count());
+    if (statement->buffers_count() > 0) {
+      length += statement->copy_buffers(bufs);
     }
   }
 

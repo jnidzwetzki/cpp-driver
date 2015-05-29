@@ -22,6 +22,8 @@
 
 namespace cass {
 
+const SharedRefPtr<DataType> DataType::NIL;
+
 bool cass::IsValidDataType<const Collection*>::operator()(const Collection* value,
                                                           const SharedRefPtr<DataType>& data_type) const {
   return value->data_type()->equals(data_type, false);

@@ -16,10 +16,10 @@
 
 #include "replication_strategy.hpp"
 
-#include "common.hpp"
 #include "logger.hpp"
 #include "map_iterator.hpp"
 #include "token_map.hpp"
+#include "utils.hpp"
 
 #include <map>
 #include <set>

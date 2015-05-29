@@ -49,7 +49,7 @@ int QueryRequest::encode(BufferVec* bufs) const {
                           sizeof(uint16_t) + sizeof(uint8_t);
   size_t paging_buf_size = 0;
 
-  if (values_count() > 0) { // <values> = <n><value_1>...<value_n>
+  if (buffers_count() > 0) { // <values> = <n><value_1>...<value_n>
     query_buf_size += sizeof(uint16_t); // <n> [short]
     flags |= CASS_QUERY_FLAG_VALUES;
   }
@@ -84,9 +84,9 @@ int QueryRequest::encode(BufferVec* bufs) const {
     pos = buf.encode_uint16(pos, consistency());
     pos = buf.encode_byte(pos, flags);
 
-    if (values_count() > 0) {
-      buf.encode_uint16(pos, values_count());
-      length += encode_values(bufs);
+    if (buffers_count() > 0) {
+      buf.encode_uint16(pos, buffers_count());
+      length += copy_buffers(bufs);
     }
   }
 

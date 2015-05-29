@@ -19,33 +19,9 @@
 #include "collection.hpp"
 #include "macros.hpp"
 #include "external_types.hpp"
+#include "utils.hpp"
 
 #include <string.h>
-
-namespace cass {
-
-template<class T>
-CassError bind_by_name(cass::UserTypeValue* user_type_value,
-                       StringRef name,
-                       T value) {
-  cass::HashIndex::IndexVec indices;
-  user_type_value->user_type()->get_indices(name, &indices);
-
-  if (indices.empty()) {
-    return CASS_ERROR_LIB_NAME_DOES_NOT_EXIST;
-  }
-
-  for (cass::HashIndex::IndexVec::const_iterator it = indices.begin(),
-       end = indices.end(); it != end; ++it) {
-    size_t index = *it;
-    CassError rc = user_type_value->set(index, value);
-    if (rc != CASS_OK) return rc;
-  }
-
-  return CASS_OK;
-}
-
-} // namespace cass
 
 extern "C" {
 
@@ -62,27 +38,29 @@ CassUserType* cass_user_type_new_n(CassSession* session,
                                    size_t keyspace_length,
                                    const char* type_name,
                                    size_t type_name_length) {
+  std::string keyspace_id(keyspace, keyspace_length);
+  std::string type_name_id(type_name, type_name_length);
   cass::SharedRefPtr<cass::UserType> user_type
-      = session->get_user_type(std::string(keyspace, keyspace_length),
-                               std::string(type_name, type_name_length));
+      = session->get_user_type(cass::to_cql_id(keyspace_id),
+                               cass::to_cql_id(type_name_id));
   if (!user_type) return NULL;
   return CassUserType::to(new cass::UserTypeValue(user_type));
 }
 
 
-#define CASS_USER_TYPE_SET(Name, Params, Value)                                      \
-  CassError cass_user_type_set_##Name(CassUserType* user_type,                       \
-                                      size_t index Params) {                         \
-    return user_type->set(index, Value);                                             \
-  }                                                                                  \
-  CassError cass_user_type_set_##Name##_by_name(CassUserType* user_type,             \
-                                                const char* name Params) {           \
-    return cass::bind_by_name(user_type, cass::StringRef(name), Value);              \
-  }                                                                                  \
-  CassError cass_user_type_set_##Name##_by_name_n(CassUserType* user_type,           \
-                                                  const char* name,                  \
-                                                  size_t name_length Params) {       \
-    return cass::bind_by_name(user_type, cass::StringRef(name, name_length), Value); \
+#define CASS_USER_TYPE_SET(Name, Params, Value)                                \
+  CassError cass_user_type_set_##Name(CassUserType* user_type,                 \
+                                      size_t index Params) {                   \
+    return user_type->set(index, Value);                                       \
+  }                                                                            \
+  CassError cass_user_type_set_##Name##_by_name(CassUserType* user_type,       \
+                                                const char* name Params) {     \
+    return user_type->set(cass::StringRef(name), Value);                       \
+  }                                                                            \
+  CassError cass_user_type_set_##Name##_by_name_n(CassUserType* user_type,     \
+                                                  const char* name,            \
+                                                  size_t name_length Params) { \
+    return user_type->set(cass::StringRef(name, name_length), Value);          \
   }
 
 CASS_USER_TYPE_SET(null, , cass::CassNull())
@@ -120,9 +98,8 @@ CassError cass_user_type_set_string_n(CassUserType* user_type,
 CassError cass_user_type_set_string_by_name(CassUserType* user_type,
                                             const char* name,
                                             const char* value) {
-  return cass::bind_by_name(user_type,
-                            cass::StringRef(name),
-                            cass::CassString(value, strlen(value)));
+  return user_type->set(cass::StringRef(name),
+                        cass::CassString(value, strlen(value)));
 }
 
 CassError cass_user_type_set_string_by_name_n(CassUserType* user_type,
@@ -130,9 +107,8 @@ CassError cass_user_type_set_string_by_name_n(CassUserType* user_type,
                                               size_t name_length,
                                               const char* value,
                                               size_t value_length) {
-  return cass::bind_by_name(user_type,
-                            cass::StringRef(name, name_length),
-                            cass::CassString(value, value_length));
+  return user_type->set(cass::StringRef(name, name_length),
+                        cass::CassString(value, value_length));
 }
 
 void cass_user_type_free(CassUserType* user_type) {
@@ -140,65 +116,3 @@ void cass_user_type_free(CassUserType* user_type) {
 }
 
 } // extern "C"
-
-namespace cass {
-
-CassError UserTypeValue::set(size_t index, const Collection* value) {
-  CASS_USER_TYPE_CHECK_INDEX_AND_TYPE(index, value);
-  if (value->type() == CASS_COLLECTION_TYPE_MAP &&
-      value->items().size() % 2 != 0) {
-    return CASS_ERROR_LIB_INVALID_ITEM_COUNT;
-  }
-  items_[index] = value->encode_with_length();
-  return CASS_OK;
-}
-
-CassError UserTypeValue::set(size_t index, const UserTypeValue* value) {
-  CASS_USER_TYPE_CHECK_INDEX_AND_TYPE(index, value);
-  items_[index] = value->encode_with_length();
-  return CASS_OK;
-}
-
-Buffer UserTypeValue::encode() const {
-  Buffer buf(get_items_size());
-  encode_items(0, &buf);
-  return buf;
-}
-
-Buffer UserTypeValue::encode_with_length() const {
-  size_t items_size = get_items_size();
-
-  Buffer buf(sizeof(int32_t) + items_size);
-
-  size_t pos = buf.encode_int32(0, items_size);
-  encode_items(pos, &buf);
-
-  return buf;
-}
-
-size_t UserTypeValue::get_items_size() const {
-  size_t size = 0;
-  for (BufferVec::const_iterator i = items_.begin(),
-       end = items_.end(); i != end; ++i) {
-    if (i->size() > 0) {
-      size += i->size();
-    } else {
-      size += sizeof(int32_t); // null
-    }
-  }
-  return size;
-}
-
-void UserTypeValue::encode_items(size_t pos, Buffer* buf) const {
-  for (BufferVec::const_iterator i = items_.begin(),
-       end = items_.end(); i != end; ++i) {
-    if (i->size() > 0) {
-      pos = buf->copy(pos, i->data(), i->size());
-    } else {
-      pos = buf->encode_int32(pos, -1); // null
-    }
-  }
-}
-
-} // namespace cass
-

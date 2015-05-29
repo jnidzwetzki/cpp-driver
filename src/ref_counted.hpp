@@ -18,7 +18,6 @@
 #define __CASS_REF_COUNTED_HPP_INCLUDED__
 
 #include "atomic.hpp"
-#include "common.hpp"
 #include "macros.hpp"
 
 #include <assert.h>

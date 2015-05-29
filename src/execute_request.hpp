@@ -33,9 +33,9 @@ public:
       : Statement(CQL_OPCODE_EXECUTE, CASS_BATCH_KIND_PREPARED,
                   prepared->result()->column_count(),
                   prepared->key_indices(),
-                  prepared->result()->keyspace(),
-                  prepared->result()->metadata())
-      , prepared_(prepared) {
+                  prepared->result()->keyspace())
+      , prepared_(prepared)
+      , metadata_(prepared->result()->metadata()){
       // If the prepared statement has result metadata then there is no
       // need to get the metadata with this request too.
       if (prepared->result()->result_metadata()) {
@@ -47,12 +47,23 @@ public:
   const SharedRefPtr<const Prepared>& prepared() const { return prepared_; }
 
 private:
+  virtual size_t get_indices(StringRef name,
+                             HashIndex::IndexVec* indices) const {
+    return metadata_->get_indices(name, indices);
+  }
+
+  virtual const SharedRefPtr<DataType>& get_type(size_t index) const {
+    return metadata_->get_column_definition(index).data_type;
+  }
+
+private:
   int encode(int version, BufferVec* bufs) const;
   int encode_v1(BufferVec* bufs) const;
   int encode(BufferVec* bufs) const;
 
 private:
   SharedRefPtr<const Prepared> prepared_;
+  SharedRefPtr<ResultMetadata> metadata_;
 };
 
 } // namespace cass

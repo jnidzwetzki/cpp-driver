@@ -51,6 +51,16 @@ public:
   }
 
 private:
+  virtual size_t get_indices(StringRef name,
+                             HashIndex::IndexVec* indices) const {
+    return 0;
+  }
+
+  virtual const SharedRefPtr<DataType>& get_type(size_t index) const {
+    return DataType::NIL;
+  }
+
+private:
   int encode(int version, BufferVec* bufs) const;
   int encode_v1(BufferVec* bufs) const;
   int encode(BufferVec* bufs) const;

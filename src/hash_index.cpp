@@ -20,7 +20,7 @@
 
 #include "hash_index.hpp"
 
-#include "common.hpp"
+#include "utils.hpp"
 
 // This can be decreased to reduce hash collisions, but it will require
 // additional memory.

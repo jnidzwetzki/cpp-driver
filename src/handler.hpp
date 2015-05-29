@@ -19,7 +19,7 @@
 
 #include "buffer.hpp"
 #include "cassandra.h"
-#include "common.hpp"
+#include "utils.hpp"
 #include "list.hpp"
 #include "scoped_ptr.hpp"
 

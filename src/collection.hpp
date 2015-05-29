@@ -126,6 +126,9 @@ private:
   CassCollectionType type_;
   SharedRefPtr<CollectionType> data_type_;
   BufferVec items_;
+
+private:
+  DISALLOW_COPY_AND_ASSIGN(Collection);
 };
 
 } // namespace cass

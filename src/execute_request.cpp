@@ -43,9 +43,9 @@ int ExecuteRequest::encode_v1(BufferVec* bufs) const {
     size_t pos = buf.encode_string(0,
                                  prepared_id.data(),
                                  prepared_id.size());
-    buf.encode_uint16(pos, values_count());
+    buf.encode_uint16(pos, buffers_count());
     // <value_1>...<value_n>
-    length += encode_values(bufs);
+    length += copy_buffers(bufs);
   }
 
   {
@@ -72,7 +72,7 @@ int ExecuteRequest::encode(BufferVec* bufs) const {
                           sizeof(uint16_t) + sizeof(uint8_t);
   size_t paging_buf_size = 0;
 
-  if (values_count() > 0) { // <values> = <n><value_1>...<value_n>
+  if (buffers_count() > 0) { // <values> = <n><value_1>...<value_n>
     prepared_buf_size += sizeof(uint16_t); // <n> [short]
     flags |= CASS_QUERY_FLAG_VALUES;
   }
@@ -107,9 +107,9 @@ int ExecuteRequest::encode(BufferVec* bufs) const {
     pos = buf.encode_uint16(pos, consistency());
     pos = buf.encode_byte(pos, flags);
 
-    if (values_count() > 0) {
-      buf.encode_uint16(pos, values_count());
-      length += encode_values(bufs);
+    if (buffers_count() > 0) {
+      buf.encode_uint16(pos, buffers_count());
+      length += copy_buffers(bufs);
     }
   }
 

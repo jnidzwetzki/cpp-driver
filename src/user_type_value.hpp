@@ -17,79 +17,36 @@
 #ifndef __CASS_USER_TYPE_VALUE_HPP_INCLUDED__
 #define __CASS_USER_TYPE_VALUE_HPP_INCLUDED__
 
+#include "abstract_data.hpp"
 #include "cassandra.h"
 #include "data_type.hpp"
-#include "encode.hpp"
-#include "buffer.hpp"
 #include "ref_counted.hpp"
-#include "types.hpp"
-
-#define CASS_USER_TYPE_CHECK_INDEX_AND_TYPE(Index, Value) do { \
-  CassError rc = check(Index, Value);                          \
-  if (rc != CASS_OK) return rc;                                \
-} while(0)
 
 namespace cass {
 
-class Collection;
-
-class UserTypeValue {
+class UserTypeValue : public AbstractData {
 public:
   UserTypeValue(const SharedRefPtr<UserType>& user_type)
-    : user_type_(user_type) {
-    items_.resize(user_type->fields().size());
-  }
+    : AbstractData(user_type->fields().size())
+    , user_type_(user_type) { }
 
   const SharedRefPtr<UserType>& user_type() const { return user_type_; }
-  const BufferVec& items() const { return items_; }
 
-#define SET_TYPE(Type)                                 \
-  CassError set(size_t index, const Type value) {      \
-    CASS_USER_TYPE_CHECK_INDEX_AND_TYPE(index, value); \
-    items_[index] = cass::encode_with_length(value);   \
-    return CASS_OK;                                    \
+protected:
+  virtual size_t get_indices(StringRef name,
+                             HashIndex::IndexVec* indices) const {
+    return user_type_->get_indices(name, indices);
   }
 
-  SET_TYPE(CassNull)
-  SET_TYPE(cass_int32_t)
-  SET_TYPE(cass_int64_t)
-  SET_TYPE(cass_float_t)
-  SET_TYPE(cass_double_t)
-  SET_TYPE(cass_bool_t)
-  SET_TYPE(CassString)
-  SET_TYPE(CassBytes)
-  SET_TYPE(CassUuid)
-  SET_TYPE(CassInet)
-  SET_TYPE(CassDecimal)
-
-#undef SET_TYPE
-
-  CassError set(size_t index, const Collection* value);
-  CassError set(size_t index, const UserTypeValue* value);
-
-  Buffer encode() const;
-  Buffer encode_with_length() const;
-
-private:
-  size_t get_items_size() const;
-
-  void encode_items(size_t pos, Buffer* buf) const;
-
-  template <class T>
-  CassError check(size_t index, const T value) {
-    if (index >= items_.size()) {                 \
-      return CASS_ERROR_LIB_INDEX_OUT_OF_BOUNDS;  \
-    }                                             \
-    IsValidDataType<T> is_valid_type;
-    if (!is_valid_type(value, user_type_->fields()[index].type)) {
-      return CASS_ERROR_LIB_INVALID_VALUE_TYPE;
-    }
-    return CASS_OK;
+  virtual const SharedRefPtr<DataType>& get_type(size_t index) const {
+    return user_type_->fields()[index].type;
   }
 
 private:
   SharedRefPtr<UserType> user_type_;
-  BufferVec items_;
+
+private:
+  DISALLOW_COPY_AND_ASSIGN(UserTypeValue);
 };
 
 } // namespace cass

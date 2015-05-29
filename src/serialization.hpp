@@ -19,8 +19,8 @@
 
 #include "address.hpp"
 #include "cassandra.h"
-#include "common.hpp"
 #include "string_ref.hpp"
+#include "utils.hpp"
 
 #include <uv.h>
 

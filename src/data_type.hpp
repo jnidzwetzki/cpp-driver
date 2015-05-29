@@ -56,6 +56,8 @@ inline bool is_uuid_type(CassValueType value_type) {
 
 class DataType : public RefCounted<DataType> {
 public:
+  static const SharedRefPtr<DataType> NIL;
+
   DataType(CassValueType value_type)
     : value_type_(value_type) { }
 

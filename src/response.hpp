@@ -17,7 +17,7 @@
 #ifndef __CASS_RESPONSE_HPP_INCLUDED__
 #define __CASS_RESPONSE_HPP_INCLUDED__
 
-#include "common.hpp"
+#include "utils.hpp"
 #include "constants.hpp"
 #include "macros.hpp"
 #include "ref_counted.hpp"

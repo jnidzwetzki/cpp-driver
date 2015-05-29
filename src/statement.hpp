@@ -17,50 +17,38 @@
 #ifndef __CASS_STATEMENT_HPP_INCLUDED__
 #define __CASS_STATEMENT_HPP_INCLUDED__
 
-#include "buffer.hpp"
+#include "abstract_data.hpp"
 #include "constants.hpp"
-#include "encode.hpp"
 #include "macros.hpp"
 #include "request.hpp"
 #include "result_metadata.hpp"
 #include "result_response.hpp"
-#include "types.hpp"
 
 #include <vector>
 #include <string>
 
-#define CASS_STATEMENT_CHECK_INDEX_AND_TYPE(Index, Value) do { \
-  CassError rc = check(Index, Value);                          \
-  if (rc != CASS_OK) return rc;                                \
-} while(0)
-
 namespace cass {
 
-class Collection;
-class UserTypeValue;
-
-class Statement : public RoutableRequest {
+class Statement : public RoutableRequest, public AbstractData {
 public:
-  Statement(uint8_t opcode, uint8_t kind, size_t value_count = 0)
+  Statement(uint8_t opcode, uint8_t kind, size_t values_count = 0)
       : RoutableRequest(opcode)
-      , values_(value_count)
+      , AbstractData(values_count)
       , skip_metadata_(false)
       , page_size_(-1)
       , kind_(kind) {}
 
-  Statement(uint8_t opcode, uint8_t kind, size_t value_count,
+  Statement(uint8_t opcode, uint8_t kind, size_t values_count,
             const std::vector<size_t>& key_indices,
-            const std::string& keyspace,
-            const SharedRefPtr<ResultMetadata> metadata)
+            const std::string& keyspace)
       : RoutableRequest(opcode, keyspace)
-      , values_(value_count)
+      , AbstractData(values_count)
       , skip_metadata_(false)
       , page_size_(-1)
       , kind_(kind)
-      , key_indices_(key_indices)
-      , metadata_(metadata) {}
+      , key_indices_(key_indices) { }
 
-  virtual ~Statement() {}
+  virtual ~Statement() { }
 
   void set_skip_metadata(bool skip_metadata) {
     skip_metadata_ = skip_metadata;
@@ -84,69 +72,16 @@ public:
 
   virtual const std::string& query() const = 0;
 
-  size_t values_count() const { return values_.size(); }
-
-  const SharedRefPtr<ResultMetadata>& metadata() const { return metadata_; }
-
   void add_key_index(size_t index) { key_indices_.push_back(index); }
 
   virtual bool get_routing_key(std::string* routing_key) const;
 
-
-#define BIND_TYPE(Type)                                \
-  CassError bind(size_t index, const Type value) {     \
-    CASS_STATEMENT_CHECK_INDEX_AND_TYPE(index, value); \
-    values_[index]  = encode_with_length(value);       \
-    return CASS_OK;                                    \
-  }
-
-  BIND_TYPE(CassNull)
-  BIND_TYPE(cass_int32_t)
-  BIND_TYPE(cass_int64_t)
-  BIND_TYPE(cass_float_t)
-  BIND_TYPE(cass_double_t)
-  BIND_TYPE(cass_bool_t)
-  BIND_TYPE(CassString)
-  BIND_TYPE(CassBytes)
-  BIND_TYPE(CassUuid)
-  BIND_TYPE(CassInet)
-  BIND_TYPE(CassDecimal)
-
-#undef BIND_TYPE
-
-  CassError bind(size_t index, CassCustom custom);
-  CassError bind(size_t index, const Collection* value);
-  CassError bind(size_t index, const UserTypeValue* value);
-
-  int32_t encode_values(BufferVec*  bufs) const;
-
 private:
-  template <class T>
-  CassError check(size_t index, const T value) const {
-    if (index >= values_count()) {
-      return CASS_ERROR_LIB_INDEX_OUT_OF_BOUNDS;
-    }
-    // This can only validate statements with metadata
-    if (!metadata_) {
-      return CASS_OK;
-    }
-    IsValidDataType<T> is_valid_type;
-    if(!is_valid_type(value, metadata_->get_column_definition(index).data_type)) {
-      return CASS_ERROR_LIB_INVALID_VALUE_TYPE;
-    }
-    return CASS_OK;
-  }
-
-  typedef BufferVec ValueVec;
-
-  ValueVec values_;
-
   bool skip_metadata_;
   int32_t page_size_;
   std::string paging_state_;
   uint8_t kind_;
   std::vector<size_t> key_indices_;
-  SharedRefPtr<ResultMetadata> metadata_;
 
 private:
   DISALLOW_COPY_AND_ASSIGN(Statement);
