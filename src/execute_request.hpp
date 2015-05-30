@@ -48,7 +48,7 @@ public:
 
 private:
   virtual size_t get_indices(StringRef name,
-                             HashIndex::IndexVec* indices) const {
+                             HashIndex::IndexVec* indices) {
     return metadata_->get_indices(name, indices);
   }
 
@@ -58,8 +58,8 @@ private:
 
 private:
   int encode(int version, BufferVec* bufs) const;
-  int encode_v1(BufferVec* bufs) const;
-  int encode(BufferVec* bufs) const;
+  int internal_encode_v1(BufferVec* bufs) const;
+  int internal_encode(int version, BufferVec* bufs) const;
 
 private:
   SharedRefPtr<const Prepared> prepared_;

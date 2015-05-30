@@ -17,8 +17,9 @@
 #ifndef __CASS_QUERY_REQUEST_HPP_INCLUDED__
 #define __CASS_QUERY_REQUEST_HPP_INCLUDED__
 
-#include "statement.hpp"
 #include "constants.hpp"
+#include "hash_index.hpp"
+#include "statement.hpp"
 
 #include <string>
 #include <vector>
@@ -28,32 +29,27 @@ namespace cass {
 class QueryRequest : public Statement {
 public:
   explicit QueryRequest(size_t value_count = 0)
-    : Statement(CQL_OPCODE_QUERY, CASS_BATCH_KIND_QUERY, value_count) {}
+    : Statement(CQL_OPCODE_QUERY, CASS_BATCH_KIND_QUERY,
+                value_count) { }
 
-
-  QueryRequest(const std::string& query, size_t value_count = 0)
-    : Statement(CQL_OPCODE_QUERY, CASS_BATCH_KIND_QUERY, value_count)
-    , query_(query) {}
+  QueryRequest(const std::string& query,
+               size_t value_count = 0)
+    : Statement(CQL_OPCODE_QUERY, CASS_BATCH_KIND_QUERY,
+                value_count)
+    , query_(query) { }
 
   QueryRequest(const char* query, size_t query_length,
-               size_t value_count)
-      : Statement(CQL_OPCODE_QUERY, CASS_BATCH_KIND_QUERY, value_count)
-      , query_(query, query_length) {}
+               size_t value_count = 0)
+    : Statement(CQL_OPCODE_QUERY, CASS_BATCH_KIND_QUERY,
+                value_count)
+      , query_(query, query_length) { }
 
   const std::string& query() const { return query_; }
 
-  void set_query(const std::string& query) {
-    query_ = query;
-  }
-
-  void set_query(const char* query, size_t query_length) {
-    query_.assign(query, query_length);
-  }
-
 private:
   virtual size_t get_indices(StringRef name,
-                             HashIndex::IndexVec* indices) const {
-    return 0;
+                             HashIndex::IndexVec* indices) {
+    return get_named_indices(name, indices);
   }
 
   virtual const SharedRefPtr<DataType>& get_type(size_t index) const {
@@ -62,8 +58,8 @@ private:
 
 private:
   int encode(int version, BufferVec* bufs) const;
-  int encode_v1(BufferVec* bufs) const;
-  int encode(BufferVec* bufs) const;
+  int internal_encode_v1(BufferVec* bufs) const;
+  int internal_encode(int version, BufferVec* bufs) const;
 
 private:
   std::string query_;

@@ -56,7 +56,6 @@ public:
 
 private:
   int encode(int version, BufferVec* bufs) const;
-  int encode(BufferVec* bufs) const;
 
 private:
   typedef std::map<std::string, ExecuteRequest*> PreparedMap;

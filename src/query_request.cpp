@@ -16,19 +16,20 @@
 
 #include "query_request.hpp"
 
+#include "logger.hpp"
 #include "serialization.hpp"
 
 namespace cass {
 
 int QueryRequest::encode(int version, BufferVec* bufs) const {
   if (version == 1) {
-    return encode_v1(bufs);
+    return internal_encode_v1(bufs);
   } else  {
-    return encode(bufs);
+    return internal_encode(version, bufs);
   }
 }
 
-int QueryRequest::encode_v1(BufferVec* bufs) const {
+int QueryRequest::internal_encode_v1(BufferVec* bufs) const {
   // <query> [long string] + <consistency> [short]
   size_t length = sizeof(int32_t) + query().size() + sizeof(uint16_t);
 
@@ -40,7 +41,7 @@ int QueryRequest::encode_v1(BufferVec* bufs) const {
   return length;
 }
 
-int QueryRequest::encode(BufferVec* bufs) const {
+int QueryRequest::internal_encode(int version, BufferVec* bufs) const {
   uint8_t flags = 0;
   size_t length = 0;
 
@@ -75,6 +76,14 @@ int QueryRequest::encode(BufferVec* bufs) const {
     flags |= CASS_QUERY_FLAG_SERIAL_CONSISTENCY;
   }
 
+  if (named_params_count() > 0) {
+    if (version < 3) {
+      LOG_ERROR("Protocol version %d does not support named parameters", version);
+      return ENCODE_ERROR_UNSUPPORTED_PROTOCOL;
+    }
+    flags |= CASS_QUERY_FLAG_NAMES_FOR_VALUES ;
+  }
+
   {
     bufs->push_back(Buffer(query_buf_size));
     length += query_buf_size;
@@ -84,7 +93,10 @@ int QueryRequest::encode(BufferVec* bufs) const {
     pos = buf.encode_uint16(pos, consistency());
     pos = buf.encode_byte(pos, flags);
 
-    if (buffers_count() > 0) {
+    if (named_params_count() > 0) {
+      buf.encode_uint16(pos, named_params_count());
+      length += copy_buffers_with_names(bufs);
+    } else if (buffers_count() > 0) {
       buf.encode_uint16(pos, buffers_count());
       length += copy_buffers(bufs);
     }

@@ -20,13 +20,13 @@ namespace cass {
 
 int ExecuteRequest::encode(int version, BufferVec* bufs) const {
   if (version == 1) {
-    return encode_v1(bufs);
+    return internal_encode_v1(bufs);
   } else {
-    return encode(bufs);
+    return encode(version, bufs);
   }
 }
 
-int ExecuteRequest::encode_v1(BufferVec* bufs) const {
+int ExecuteRequest::internal_encode_v1(BufferVec* bufs) const {
   size_t length = 0;
 
   const std::string& prepared_id = prepared_->id();
@@ -61,7 +61,7 @@ int ExecuteRequest::encode_v1(BufferVec* bufs) const {
   return length;
 }
 
-int ExecuteRequest::encode(BufferVec* bufs) const {
+int ExecuteRequest::internal_encode(int version, BufferVec* bufs) const {
   uint8_t flags = 0;
   size_t length = 0;
 

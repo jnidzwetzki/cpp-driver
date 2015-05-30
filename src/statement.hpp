@@ -31,12 +31,28 @@ namespace cass {
 
 class Statement : public RoutableRequest, public AbstractData {
 public:
+  struct NamedParameter : HashIndex::Entry {
+    NamedParameter(const std::string& name)
+      : buf(sizeof(uint16_t) + name.size()) {
+      buf.encode_string(0, name.data(), name.size());
+    }
+
+    StringRef to_string_ref() const {
+      return StringRef(buf.data() + sizeof(uint16_t),
+                       buf.size() - sizeof(uint16_t));
+    }
+
+    Buffer buf;
+  };
+
+  typedef std::vector<NamedParameter> NamedParameterVec;
+
   Statement(uint8_t opcode, uint8_t kind, size_t values_count = 0)
       : RoutableRequest(opcode)
       , AbstractData(values_count)
       , skip_metadata_(false)
       , page_size_(-1)
-      , kind_(kind) {}
+      , kind_(kind) { }
 
   Statement(uint8_t opcode, uint8_t kind, size_t values_count,
             const std::vector<size_t>& key_indices,
@@ -50,12 +66,10 @@ public:
 
   virtual ~Statement() { }
 
+  bool skip_metadata() const { return skip_metadata_; }
+
   void set_skip_metadata(bool skip_metadata) {
     skip_metadata_ = skip_metadata;
-  }
-
-  bool skip_metadata() const {
-    return skip_metadata_;
   }
 
   int32_t page_size() const { return page_size_; }
@@ -72,9 +86,24 @@ public:
 
   virtual const std::string& query() const = 0;
 
+  const NamedParameterVec& named_params() const {
+    return named_params_;
+  }
+
+  size_t named_params_count() const{
+    return named_params_.size();
+  }
+
   void add_key_index(size_t index) { key_indices_.push_back(index); }
 
   virtual bool get_routing_key(std::string* routing_key) const;
+
+  int32_t copy_buffers(BufferVec* bufs) const;
+
+  int32_t copy_buffers_with_names(BufferVec* bufs) const;
+
+protected:
+  size_t get_named_indices(StringRef name, HashIndex::IndexVec* indices);
 
 private:
   bool skip_metadata_;
@@ -82,6 +111,10 @@ private:
   std::string paging_state_;
   uint8_t kind_;
   std::vector<size_t> key_indices_;
+
+private:
+  NamedParameterVec named_params_;
+  ScopedPtr<HashIndex> named_params_index_;
 
 private:
   DISALLOW_COPY_AND_ASSIGN(Statement);
