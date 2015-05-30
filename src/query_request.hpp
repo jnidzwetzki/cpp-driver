@@ -28,6 +28,22 @@ namespace cass {
 
 class QueryRequest : public Statement {
 public:
+  struct ValueName : HashIndex::Entry {
+    ValueName(const std::string& name)
+      : buf(sizeof(uint16_t) + name.size()) {
+      buf.encode_string(0, name.data(), name.size());
+    }
+
+    StringRef to_string_ref() const {
+      return StringRef(buf.data() + sizeof(uint16_t),
+                       buf.size() - sizeof(uint16_t));
+    }
+
+    Buffer buf;
+  };
+
+  typedef std::vector<ValueName> ValueNameVec;
+
   explicit QueryRequest(size_t value_count = 0)
     : Statement(CQL_OPCODE_QUERY, CASS_BATCH_KIND_QUERY,
                 value_count) { }
@@ -44,25 +60,27 @@ public:
                 value_count)
       , query_(query, query_length) { }
 
-  const std::string& query() const { return query_; }
+  virtual int32_t encode_batch(int version, BufferVec* bufs) const;
 
 private:
   virtual size_t get_indices(StringRef name,
-                             HashIndex::IndexVec* indices) {
-    return get_named_indices(name, indices);
-  }
+                             HashIndex::IndexVec* indices);
 
   virtual const SharedRefPtr<DataType>& get_type(size_t index) const {
     return DataType::NIL;
   }
 
 private:
+  int32_t copy_buffers_with_names(BufferVec* bufs) const;
+
   int encode(int version, BufferVec* bufs) const;
   int internal_encode_v1(BufferVec* bufs) const;
   int internal_encode(int version, BufferVec* bufs) const;
 
 private:
   std::string query_;
+  ValueNameVec value_names_;
+  ScopedPtr<HashIndex> value_names_index_;
 };
 
 } // namespace cass

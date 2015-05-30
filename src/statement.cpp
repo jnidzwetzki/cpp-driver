@@ -176,21 +176,6 @@ int32_t Statement::copy_buffers(BufferVec* bufs) const {
   return size;
 }
 
-int32_t Statement::copy_buffers_with_names(BufferVec* bufs) const {
-  int32_t size = 0;
-  for (size_t i = 0; i < named_params_.size(); ++i) {
-    const Buffer& name_buf = named_params_[i].buf;
-    bufs->push_back(name_buf);
-
-    const Buffer& value_buf(buffers()[i]);
-    bufs->push_back(value_buf);
-
-    size += name_buf.size() + value_buf.size();
-  }
-  return size;
-}
-
-
 bool Statement::get_routing_key(std::string* routing_key)  const {
   if (key_indices_.empty()) return false;
 
@@ -224,31 +209,6 @@ bool Statement::get_routing_key(std::string* routing_key)  const {
   }
 
   return true;
-}
-
-size_t Statement::get_named_indices(StringRef name, HashIndex::IndexVec* indices) {
-  if (!named_params_index_) {
-    named_params_index_.reset(new HashIndex(buffers_count()));
-  }
-
-  if (named_params_index_->get(name, indices) == 0) {
-    size_t index = named_params_.size();
-
-    if (index > buffers_count()) {
-    // No more space left for new named parameters
-      return 0;
-    }
-    named_params_.push_back(NamedParameter(name.to_string()));
-
-    NamedParameter* named_param = &named_params_.back();
-    named_param->index = index;
-    named_param->name = named_param->to_string_ref();
-    named_params_index_->insert(named_param);
-
-    indices->push_back(index);
-  }
-
-  return indices->size();
 }
 
 } // namespace  cass

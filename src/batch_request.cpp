@@ -50,7 +50,8 @@ CassError cass_batch_add_statement(CassBatch* batch, CassStatement* statement) {
 namespace cass {
 
 int BatchRequest::encode(int version, BufferVec* bufs) const {
-  size_t length = 0;
+  int length = 0;
+  uint8_t flags = 0;
 
   if (version == 1) {
     return ENCODE_ERROR_UNSUPPORTED_PROTOCOL;
@@ -68,42 +69,22 @@ int BatchRequest::encode(int version, BufferVec* bufs) const {
     length += buf_size;
   }
 
-  for (BatchRequest::StatementList::const_iterator
-       it = statements_.begin(),
-       end = statements_.end();
-       it != end; ++it) {
-    const SharedRefPtr<Statement>& statement = *it;
-
-    // <kind> [byte]
-    int buf_size = sizeof(uint8_t);
-
-    // <string_or_id> [long string] | [short bytes]
-    buf_size += (statement->kind() == CASS_BATCH_KIND_QUERY) ? sizeof(int32_t) : sizeof(uint16_t);
-    buf_size += statement->query().size();
-
-    // <n><value_1>...<value_n>
-    buf_size += sizeof(uint16_t); // <n> [short]
-
-    bufs->push_back(Buffer(buf_size));
-    length += buf_size;
-
-    Buffer& buf = bufs->back();
-    size_t pos = buf.encode_byte(0, statement->kind());
-
-    if (statement->kind() == CASS_BATCH_KIND_QUERY) {
-      pos = buf.encode_long_string(pos,
-                                 statement->query().data(),
-                                 statement->query().size());
-    } else {
-      pos = buf.encode_string(pos,
-                              statement->query().data(),
-                              statement->query().size());
+  bool has_names_for_values = false;
+  for (BatchRequest::StatementList::const_iterator i = statements_.begin(),
+       end = statements_.end(); i != end; ++i) {
+    const SharedRefPtr<Statement>& statement(*i);
+    if (statement->has_names_for_values()) {
+      has_names_for_values = true;
+    } else if (has_names_for_values) {
+      return ENCODE_ERROR_BATCH_MIXED_NAMED_VALUES;
     }
+    int32_t result = (*i)->encode_batch(version, bufs);
+    if (result < 0) return result;
+    length += result;
+  }
 
-    buf.encode_uint16(pos, statement->buffers_count());
-    if (statement->buffers_count() > 0) {
-      length += statement->copy_buffers(bufs);
-    }
+  if (has_names_for_values) {
+    flags |= CASS_QUERY_FLAG_NAMES_FOR_VALUES;
   }
 
   {
@@ -111,18 +92,22 @@ int BatchRequest::encode(int version, BufferVec* bufs) const {
     size_t buf_size = sizeof(uint16_t);
 
     Buffer buf(buf_size);
-    buf.encode_uint16(0, consistency_);
+    size_t pos = buf.encode_uint16(0, consistency_);
     bufs->push_back(buf);
     length += buf_size;
+
+    if (version >= 3) {
+      buf.encode_byte(pos, flags);
+    }
   }
 
   return length;
 }
 
 void BatchRequest::add_statement(Statement* statement) {
-  if (statement->kind() == 1) {
+  if (statement->kind() == CASS_BATCH_KIND_PREPARED) {
     ExecuteRequest* execute_request = static_cast<ExecuteRequest*>(statement);
-    prepared_statements_[execute_request->query()] = execute_request;
+    prepared_statements_[execute_request->prepared()->id()] = execute_request;
   }
   statements_.push_back(SharedRefPtr<Statement>(statement));
 }
