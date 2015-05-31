@@ -19,6 +19,7 @@
 #include "utils.hpp"
 #include "logger.hpp"
 #include "scoped_ptr.hpp"
+#include "string_ref.hpp"
 
 #include <sstream>
 
@@ -33,7 +34,63 @@
 #define UDT_TYPE "org.apache.cassandra.db.marshal.UserType"
 #define TUPLE_TYPE "org.apache.cassandra.db.marshal.TupleType"
 
+#define MARSHAL_PACKAGE "org.apache.cassandra.db.marshal."
+
 namespace cass {
+
+static CassValueType get_value_type(const std::string& str) {
+  if (starts_with(str, MARSHAL_PACKAGE)) {
+    StringRef type(StringRef(str).substr(sizeof(MARSHAL_PACKAGE) - 1));
+    switch (type.front()) {
+      case 'A':
+        if (type == "AsciiType") return CASS_VALUE_TYPE_ASCII;
+        break;
+
+      case 'B':
+        if (type == "BooleanType") return CASS_VALUE_TYPE_BOOLEAN;
+        if (type == "BytesType") return CASS_VALUE_TYPE_BLOB;
+        break;
+
+      case 'C':
+        if (type == "CounterColumnType") return CASS_VALUE_TYPE_COUNTER;
+        break;
+
+      case 'D':
+        if (type == "DateType") return CASS_VALUE_TYPE_TIMESTAMP;
+        if (type == "DecimalType") return CASS_VALUE_TYPE_DECIMAL;
+        if (type == "DoubleType") return CASS_VALUE_TYPE_DOUBLE;
+        break;
+
+      case 'F':
+        if (type == "FloatType") return CASS_VALUE_TYPE_FLOAT;
+        break;
+
+      case 'I':
+        if (type == "InetAddressType") return CASS_VALUE_TYPE_INET;
+        if (type == "Int32Type") return CASS_VALUE_TYPE_INT;
+        if (type == "IntegerType") return CASS_VALUE_TYPE_INT;
+        break;
+
+      case 'L':
+        if (type == "LongType") return CASS_VALUE_TYPE_BIGINT;
+        break;
+
+      case 'T':
+        if (type == "TimestampType") return CASS_VALUE_TYPE_TIMESTAMP;
+        if (type == "TimeUUIDType") return CASS_VALUE_TYPE_TIMEUUID;
+        break;
+
+      case 'U':
+        if (type == "UTF8Type") return CASS_VALUE_TYPE_TEXT;
+        if (type == "UUIDType") return CASS_VALUE_TYPE_UUID;
+        break;
+
+      default:
+        break;
+    }
+  }
+  return CASS_VALUE_TYPE_UNKNOWN;
+}
 
 int hex_value(int c) {
   if (c >= '0' && c <= '9') {
@@ -61,34 +118,6 @@ bool from_hex(const std::string& hex, std::string* result) {
     (*result)[i] = static_cast<char>((static_cast<uint8_t>(half0) << 4) | static_cast<uint8_t>(half1));
   }
   return true;
-}
-
-TypeParser::TypeMapper::TypeMapper() {
-  name_type_map_["org.apache.cassandra.db.marshal.AsciiType"] = CASS_VALUE_TYPE_ASCII;
-  name_type_map_["org.apache.cassandra.db.marshal.LongType"] = CASS_VALUE_TYPE_BIGINT;
-  name_type_map_["org.apache.cassandra.db.marshal.BytesType"] = CASS_VALUE_TYPE_BLOB;
-  name_type_map_["org.apache.cassandra.db.marshal.BooleanType"] = CASS_VALUE_TYPE_BOOLEAN;
-  name_type_map_["org.apache.cassandra.db.marshal.CounterColumnType"] = CASS_VALUE_TYPE_COUNTER;
-  name_type_map_["org.apache.cassandra.db.marshal.DecimalType"] = CASS_VALUE_TYPE_DECIMAL;
-  name_type_map_["org.apache.cassandra.db.marshal.DoubleType"] = CASS_VALUE_TYPE_DOUBLE;
-  name_type_map_["org.apache.cassandra.db.marshal.FloatType"] = CASS_VALUE_TYPE_FLOAT;
-  name_type_map_["org.apache.cassandra.db.marshal.InetAddressType"] = CASS_VALUE_TYPE_INET;
-  name_type_map_["org.apache.cassandra.db.marshal.Int32Type"] = CASS_VALUE_TYPE_INT;
-  name_type_map_["org.apache.cassandra.db.marshal.UTF8Type"] = CASS_VALUE_TYPE_TEXT;
-  name_type_map_["org.apache.cassandra.db.marshal.TimestampType"] = CASS_VALUE_TYPE_TIMESTAMP;
-  name_type_map_["org.apache.cassandra.db.marshal.DateType"] = CASS_VALUE_TYPE_TIMESTAMP;
-  name_type_map_["org.apache.cassandra.db.marshal.UUIDType"] = CASS_VALUE_TYPE_UUID;
-  name_type_map_["org.apache.cassandra.db.marshal.IntegerType"] = CASS_VALUE_TYPE_INT;
-  name_type_map_["org.apache.cassandra.db.marshal.TimeUUIDType"] = CASS_VALUE_TYPE_TIMEUUID;
-}
-
-CassValueType TypeParser::TypeMapper::operator[](const std::string& type_name) const {
-  NameTypeMap::const_iterator itr = name_type_map_.find(type_name);
-  if (itr != name_type_map_.end()) {
-    return itr->second;
-  } else {
-    return CASS_VALUE_TYPE_UNKNOWN;
-  }
 }
 
 bool TypeParser::is_reversed(const std::string& type) {
@@ -234,7 +263,7 @@ SharedRefPtr<DataType> TypeParser::parse_one(const std::string& type) {
     return CollectionType::tuple(types);
   }
 
-  CassValueType t = type_map_[next];
+  CassValueType t = get_value_type(next);
   return t == CASS_VALUE_TYPE_UNKNOWN ? SharedRefPtr<DataType>(new CustomType(next))
                                       : SharedRefPtr<DataType>(new DataType(t));
 }
@@ -312,8 +341,6 @@ bool TypeParser::get_nested_class_name(const std::string& type, std::string* cla
   *class_name = params[0];
   return true;
 }
-
-const TypeParser::TypeMapper TypeParser::type_map_;
 
 bool TypeParser::Parser::read_one(std::string* name_and_args) {
   std::string name;

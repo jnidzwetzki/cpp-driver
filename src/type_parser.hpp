@@ -73,15 +73,6 @@ public:
   static SharedRefPtr<DataType> parse_one(const std::string& type);
   static SharedRefPtr<ParseResult> parse_with_composite(const std::string& type);
 
-  class TypeMapper {
-  public:
-    TypeMapper();
-    CassValueType operator[](const std::string& cass_type) const;
-  private:
-    typedef std::map<std::string, CassValueType> NameTypeMap;
-    NameTypeMap name_type_map_;
-  };
-
 private:
   static bool get_nested_class_name(const std::string& type, std::string* class_name);
 
@@ -132,8 +123,6 @@ private:
   };
 
   TypeParser();
-
-  const static TypeMapper type_map_;
 };
 
 } // namespace cass
