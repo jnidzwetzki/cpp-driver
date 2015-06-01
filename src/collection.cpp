@@ -80,7 +80,7 @@ CassError Collection::append(const Collection* value) {
 }
 
 size_t Collection::get_items_size() const {
-  if (protocol_version_ >= 3) {
+  if (protocol_version_ >= 3 || type_ == CASS_COLLECTION_TYPE_TUPLE) {
     return get_items_size(sizeof(int32_t));
   } else {
     return get_items_size(sizeof(uint16_t));
@@ -88,7 +88,7 @@ size_t Collection::get_items_size() const {
 }
 
 void Collection::encode_items(char* buf) const {
-  if (protocol_version_ >= 3) {
+  if (protocol_version_ >= 3 || type_ == CASS_COLLECTION_TYPE_TUPLE) {
     encode_items_int32(buf);
   } else {
     encode_items_uint16(buf);
@@ -96,7 +96,11 @@ void Collection::encode_items(char* buf) const {
 }
 
 Buffer Collection::encode() const {
-  if (protocol_version_ >= 3) {
+  if (type_ == CASS_COLLECTION_TYPE_TUPLE) {
+    Buffer buf(get_items_size(sizeof(int32_t)));
+    encode_items_int32(buf.data());
+    return buf;
+  } else if (protocol_version_ >= 3) {
     Buffer buf(sizeof(int32_t) + get_items_size(sizeof(int32_t)));
     size_t pos = buf.encode_int32(0, get_count());
     encode_items_int32(buf.data() + pos);
@@ -110,27 +114,38 @@ Buffer Collection::encode() const {
 }
 
 Buffer Collection::encode_with_length() const {
-  size_t internal_size;
+  if (type_ == CASS_COLLECTION_TYPE_TUPLE) {
+    size_t internal_size = get_items_size(sizeof(int32_t));
 
-  if (protocol_version_ >= 3) {
-    internal_size = sizeof(int32_t) + get_items_size(sizeof(int32_t));
-  } else {
-    internal_size = sizeof(uint16_t) + get_items_size(sizeof(uint16_t));
-  }
+    Buffer buf(sizeof(int32_t) + internal_size);
+    size_t pos = buf.encode_int32(0, internal_size);
 
-  Buffer buf(sizeof(int32_t) + internal_size);
-
-  size_t pos = buf.encode_int32(0, internal_size);
-
-  if (protocol_version_ >= 3) {
-    pos = buf.encode_int32(pos, get_count());
     encode_items_int32(buf.data() + pos);
-  } else {
-    pos = buf.encode_uint16(pos, get_count());
-    encode_items_uint16(buf.data() + pos);
-  }
 
-  return buf;
+    return buf;
+  } else {
+    size_t internal_size;
+
+    if (protocol_version_ >= 3) {
+      internal_size = sizeof(int32_t) + get_items_size(sizeof(int32_t));
+    } else {
+      internal_size = sizeof(uint16_t) + get_items_size(sizeof(uint16_t));
+    }
+
+    Buffer buf(sizeof(int32_t) + internal_size);
+
+    size_t pos = buf.encode_int32(0, internal_size);
+
+    if (protocol_version_ >= 3) {
+      pos = buf.encode_int32(pos, get_count());
+      encode_items_int32(buf.data() + pos);
+    } else {
+      pos = buf.encode_uint16(pos, get_count());
+      encode_items_uint16(buf.data() + pos);
+    }
+
+    return buf;
+  }
 }
 
 size_t Collection::get_items_size(size_t num_bytes_for_size) const {
